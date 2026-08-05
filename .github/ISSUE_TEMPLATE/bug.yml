@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible CLI problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials or private vulnerability details. Use the private security-reporting link for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: CLI version
+      description: Output of `kalshi --version`
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system and `node --version`
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and sanitized output
+      description: Include the exact command and structured output, removing anything sensitive.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true

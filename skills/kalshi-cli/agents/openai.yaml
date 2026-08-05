@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kalshi Public CLI"
+  short_description: "Query public Kalshi market data safely"
+  default_prompt: "Use $kalshi-cli to retrieve read-only Kalshi market discovery, quotes, trades, orderbooks, or price-history data."

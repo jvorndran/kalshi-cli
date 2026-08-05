@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a change within the public, read-only scope
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What public market-data task should become easier?
+    validations:
+      required: true
+  - type: textarea
+    id: endpoint
+    attributes:
+      label: Public endpoint or contract
+      description: Identify the provider GET route or existing command contract involved.
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: This request does not require credentials, account data, orders, trading, arbitrary requests, file writes, hidden retries, or automatic pagination.
+          required: true
