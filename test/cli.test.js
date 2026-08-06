@@ -3,11 +3,12 @@ import {createHash} from "node:crypto";
 import test from "node:test";
 
 import {parseArguments} from "../src/args.js";
-import {COMMANDS} from "../src/commands.js";
+import {COMMANDS, SERIES_MAX_RESPONSE_BYTES} from "../src/commands.js";
 import {executeRequest} from "../src/execute.js";
 import {runCli} from "../src/main.js";
 import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
+import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
 function captureStream() {
   const chunks = [];
@@ -36,6 +37,22 @@ function jsonResponse(body, init = {}) {
   });
 }
 
+function yamlScalar(document, key, indent = 0) {
+  const match = document.match(new RegExp(`^${" ".repeat(indent)}${key}: (.+)$`, "m"));
+  assert.ok(match, `missing YAML scalar: ${key}`);
+  const value = match[1];
+  if (value.startsWith('"')) return JSON.parse(value);
+  if (value === "null") return null;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) return Number(value);
+  return value;
+}
+
+function yamlErrorCode(document) {
+  return yamlScalar(document, "code", 2);
+}
+
 test("root help is offline and lists the public command surface", async () => {
   let calls = 0;
   const result = await invoke(["--help"], {fetchImpl: async () => { calls += 1; }});
@@ -46,9 +63,10 @@ test("root help is offline and lists the public command surface", async () => {
   assert.equal(calls, 0);
 });
 
-test("all 16 commands resolve to the fixed endpoint and response contract", () => {
+test("all 17 commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
-    [["series"], "/series", "array"],
+    [["series", "--category", "Sports"], "/series", "array"],
+    [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
     [["events"], "/events", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
@@ -66,7 +84,7 @@ test("all 16 commands resolve to the fixed endpoint and response contract", () =
     [["historical", "trades"], "/historical/trades", "array"]
   ];
   assert.equal(COMMANDS.length, cases.length);
-  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET"].includes(part)).join(" ")));
+  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "Sports"].includes(part)).join(" ")));
   for (const [argv, endpoint, resultType] of cases) {
     const parsed = parseArguments(argv);
     const request = buildRequest(parsed.definition, parsed.values);
@@ -108,12 +126,16 @@ test("market get maps an encoded path and preserves the raw provider document", 
   assert.equal(calls[0].options.headers.authorization, undefined);
   assert.equal(calls[0].options.headers["user-agent"], `@jvorndran/kalshi-cli/${VERSION}`);
 
-  const document = JSON.parse(result.stdout);
-  assert.equal(document.count, 1);
-  assert.equal(document.requested_at, "2026-08-04T20:00:00.000Z");
-  assert.equal(document.observed_at, "2026-08-04T20:00:00.125Z");
-  assert.equal(document.response_sha256, `sha256:${createHash("sha256").update(rawText).digest("hex")}`);
-  assert.deepEqual(document.data, raw);
+  assert.equal(yamlScalar(result.stdout, "count"), 1);
+  assert.equal(yamlScalar(result.stdout, "requested_at"), "2026-08-04T20:00:00.000Z");
+  assert.equal(yamlScalar(result.stdout, "observed_at"), "2026-08-04T20:00:00.125Z");
+  assert.equal(yamlScalar(result.stdout, "response_sha256"), `sha256:${createHash("sha256").update(rawText).digest("hex")}`);
+  assert.match(result.stdout, /data:\n  market:\n    ticker: KXNCAAFGAME-TEST/);
+  assert.match(result.stdout, /yes_bid_dollars: "0\.4100"/);
+  assert.match(result.stdout, /nullable_field: null/);
+  assert.match(result.stdout, /future_field:\n      kept: true/);
+  assert.ok(result.stdout.endsWith("\n"));
+  assert.ok(!result.stdout.endsWith("\n\n"));
 });
 
 test("provider number lexemes remain lossless in CLI output", async () => {
@@ -124,9 +146,9 @@ test("provider number lexemes remain lossless in CLI output", async () => {
 
   assert.equal(result.exitCode, 0);
   assert.equal(result.stderr, "");
-  assert.match(result.stdout, /"unsafe_integer":9007199254740993/);
-  assert.match(result.stdout, /"large_exponent":1e400/);
-  assert.equal(JSON.parse(result.stdout).count, 1);
+  assert.match(result.stdout, /unsafe_integer: 9007199254740993/);
+  assert.match(result.stdout, /large_exponent: 1e400/);
+  assert.equal(yamlScalar(result.stdout, "count"), 1);
 });
 
 test("series list and series get use different response-shape contracts", async () => {
@@ -137,13 +159,40 @@ test("series list and series get use different response-shape contracts", async 
     }
   });
   assert.equal(list.exitCode, 0);
-  assert.equal(JSON.parse(list.stdout).count, 1);
+  assert.equal(yamlScalar(list.stdout, "count"), 1);
 
   const get = await invoke(["series", "get", "--series-ticker", "KXNCAAFGAME"], {
     fetchImpl: async () => jsonResponse({series: {ticker: "KXNCAAFGAME"}})
   });
   assert.equal(get.exitCode, 0);
-  assert.deepEqual(JSON.parse(get.stdout).data.series, {ticker: "KXNCAAFGAME"});
+  assert.match(get.stdout, /data:\n  series:\n    ticker: KXNCAAFGAME/);
+});
+
+test("oversized unpaginated series results fail without polluting stdout", async () => {
+  const result = await invoke(["series", "--category", "Sports"], {
+    fetchImpl: async () => jsonResponse({series: [{ticker: "TEST", padding: "x".repeat(SERIES_MAX_RESPONSE_BYTES)}]})
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(yamlErrorCode(result.stderr), "response_too_large");
+  assert.match(yamlScalar(result.stderr, "hint", 2), /kalshi series tags/);
+});
+
+test("YAML rendering quotes ambiguous strings and preserves nulls and empty collections", () => {
+  const provider = parseLosslessJson('{"true":".5","values":["true","2026-08-05T00:00:00Z","0.5600",null,{},[]]}');
+  assert.equal(renderYamlDocument({data: provider}), [
+    "data:",
+    '  "true": ".5"',
+    "  values:",
+    '    - "true"',
+    '    - "2026-08-05T00:00:00Z"',
+    '    - "0.5600"',
+    "    - null",
+    "    - {}",
+    "    - []",
+    ""
+  ].join("\n"));
 });
 
 test("options map exactly and pagination remains caller-controlled", () => {
@@ -163,6 +212,15 @@ test("options map exactly and pagination remains caller-controlled", () => {
     request.url,
     `${BASE_URL}/events?limit=25&cursor=next_page&with_nested_markets=false&status=open&series_ticker=KXNCAAFGAME`
   );
+});
+
+test("paginated list commands default to a small caller-visible page", () => {
+  for (const argv of [["events"], ["markets"], ["markets", "trades"], ["historical", "markets"], ["historical", "trades"]]) {
+    const parsed = parseArguments(argv);
+    const request = buildRequest(parsed.definition, parsed.values);
+    assert.equal(request.query.limit, 20, parsed.definition.name);
+    assert.match(request.url, /[?&]limit=20(?:&|$)/);
+  }
 });
 
 test("batch candles accept arbitrary positive minute intervals and normalize ticker CSV", () => {
@@ -185,6 +243,7 @@ test("batch candles accept arbitrary positive minute intervals and normalize tic
 for (const [name, argv, code, message] of [
   ["unknown options", ["markets", "--all"], "unknown_option", "--all"],
   ["duplicate options", ["markets", "--limit", "1", "--limit", "2"], "duplicate_option", "more than once"],
+  ["unfiltered unpaginated series", ["series"], "invalid_query", "unpaginated endpoint"],
   ["missing required values", ["markets", "get"], "missing_required_option", "--ticker is required"],
   ["invalid tickers", ["markets", "get", "--ticker", "../orders"], "invalid_argument", "ticker"],
   ["invalid event ticker CSV values", ["events", "--tickers", "GOOD,../orders"], "invalid_argument", "invalid ticker"],
@@ -201,9 +260,8 @@ for (const [name, argv, code, message] of [
     const result = await invoke(argv, {fetchImpl: async () => { calls += 1; }});
     assert.equal(result.exitCode, 2);
     assert.equal(result.stdout, "");
-    const error = JSON.parse(result.stderr).error;
-    assert.equal(error.code, code);
-    assert.match(error.message, new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    assert.equal(yamlErrorCode(result.stderr), code);
+    assert.match(yamlScalar(result.stderr, "message", 2), new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     assert.equal(calls, 0);
   });
 }
@@ -216,7 +274,7 @@ test("historical cutoff validates and counts the string cutoff", async () => {
     })
   });
   assert.equal(result.exitCode, 0);
-  assert.equal(JSON.parse(result.stdout).count, 1);
+  assert.equal(yamlScalar(result.stdout, "count"), 1);
 });
 
 test("provider errors are normalized without leaking arbitrary request headers", async () => {
@@ -225,13 +283,12 @@ test("provider errors are normalized without leaking arbitrary request headers",
   });
   assert.equal(result.exitCode, 1);
   assert.equal(result.stdout, "");
-  const error = JSON.parse(result.stderr).error;
-  assert.equal(error.code, "kalshi_http_error");
-  assert.equal(error.status, 429);
-  assert.equal(error.message, "Slow down");
-  assert.match(error.hint, /caller-controlled/);
-  assert.equal(error.endpoint, "/markets");
-  assert.deepEqual(error.query, {limit: 1});
+  assert.equal(yamlErrorCode(result.stderr), "kalshi_http_error");
+  assert.equal(yamlScalar(result.stderr, "status", 2), 429);
+  assert.equal(yamlScalar(result.stderr, "message", 2), "Slow down");
+  assert.match(yamlScalar(result.stderr, "hint", 2), /caller-controlled/);
+  assert.equal(yamlScalar(result.stderr, "endpoint", 2), "/markets");
+  assert.match(result.stderr, /query:\n    limit: 1/);
 });
 
 test("deep provider error details are bounded and remain structured", async () => {
@@ -243,16 +300,15 @@ test("deep provider error details are bounded and remain structured", async () =
 
   assert.equal(result.exitCode, 1);
   assert.equal(result.stdout, "");
-  const error = JSON.parse(result.stderr).error;
-  assert.equal(error.code, "kalshi_http_error");
-  assert.equal(error.message, "Nested failure");
-  assert.match(JSON.stringify(error.details), /truncated/);
+  assert.equal(yamlErrorCode(result.stderr), "kalshi_http_error");
+  assert.equal(yamlScalar(result.stderr, "message", 2), "Nested failure");
+  assert.match(result.stderr, /truncated/);
 });
 
 test("unexpected provider shapes fail closed", async () => {
   const result = await invoke(["markets"], {fetchImpl: async () => jsonResponse({markets: {not: "an array"}})});
   assert.equal(result.exitCode, 1);
-  assert.equal(JSON.parse(result.stderr).error.code, "upstream_shape_error");
+  assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
 });
 
 test("response-size limits are enforced before reading the body", async () => {
@@ -293,7 +349,7 @@ for (const [name, response, code] of [
   test(`${name} upstream responses return stable errors`, async () => {
     const result = await invoke(["markets"], {fetchImpl: async () => response});
     assert.equal(result.exitCode, 1);
-    assert.equal(JSON.parse(result.stderr).error.code, code);
+    assert.equal(yamlErrorCode(result.stderr), code);
   });
 }
 
@@ -305,7 +361,7 @@ test("timeouts abort the public request and return a stable error", async () => 
     })
   });
   assert.equal(result.exitCode, 1);
-  assert.equal(JSON.parse(result.stderr).error.code, "network_timeout");
+  assert.equal(yamlErrorCode(result.stderr), "network_timeout");
 });
 
 test("timeouts also interrupt a stalled response body", async () => {
@@ -318,5 +374,5 @@ test("timeouts also interrupt a stalled response body", async () => {
     }))
   });
   assert.equal(result.exitCode, 1);
-  assert.equal(JSON.parse(result.stderr).error.code, "network_timeout");
+  assert.equal(yamlErrorCode(result.stderr), "network_timeout");
 });

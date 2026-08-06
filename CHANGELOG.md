@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Versions follow Sem
 
 ## [Unreleased]
 
+- Replace JSON output with deterministic, newline-terminated YAML while preserving Kalshi's nulls, unknown fields, fixed-point strings, and raw number lexemes
+- Default paginated list commands to 20 records while keeping `--limit` and cursors caller-controlled
+- Add compact `series tags` discovery and require a category, tag, or update timestamp for `series`; its unpaginated response is capped at 64 KiB to prevent context flooding without truncating Kalshi data
+
 ## [0.1.0] - 2026-08-05
 
 - Initial public, unauthenticated, read-only Kalshi market-data CLI

@@ -1,7 +1,7 @@
 {
   "name": "@jvorndran/kalshi-cli",
-  "version": "0.1.0",
-  "description": "Agent-first, read-only CLI for Kalshi public market data",
+  "version": "0.1.1",
+  "description": "Agent-first, read-only CLI for Kalshi public market data with deterministic YAML output",
   "author": "Jacob Vorndran",
   "type": "module",
   "bin": {
@@ -15,7 +15,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "node --check bin/kalshi.js && node --check src/args.js && node --check src/commands.js && node --check src/errors.js && node --check src/execute.js && node --check src/main.js && node --check src/request.js && node --check src/version.js && node --check scripts/check-release.js && npm test && npm run test:pack",
+    "check": "node --check bin/kalshi.js && node --check src/args.js && node --check src/commands.js && node --check src/errors.js && node --check src/execute.js && node --check src/main.js && node --check src/request.js && node --check src/version.js && node --check src/yaml.js && node --check scripts/check-release.js && npm test && npm run test:pack",
     "test": "node --test test/cli.test.js test/install.test.js",
     "test:live": "node --test test/live-smoke.test.js",
     "test:pack": "node --test test/pack.test.js",

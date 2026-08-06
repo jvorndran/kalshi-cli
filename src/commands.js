@@ -35,8 +35,18 @@ const cursorOption = stringOption("cursor", "cursor", "Pagination cursor from th
   ascii: true
 });
 
+export const DEFAULT_PAGE_LIMIT = 20;
+export const SERIES_MAX_RESPONSE_BYTES = 64 * 1024;
+
+const pageLimitOption = (subject, {min, max}) => integerOption(
+  "limit",
+  "limit",
+  `Maximum ${subject} to return (${min}-${max}; default ${DEFAULT_PAGE_LIMIT}).`,
+  {min, max, defaultValue: DEFAULT_PAGE_LIMIT}
+);
+
 const tradeOptions = () => [
-  integerOption("limit", "limit", "Maximum trades to return (0-1000).", {min: 0, max: 1000}),
+  pageLimitOption("trades", {min: 0, max: 1000}),
   cursorOption,
   tickerOption("ticker", "ticker", "Filter by one market ticker."),
   integerOption("min-ts", "min_ts", "Return trades after this Unix timestamp in seconds.", {min: 0}),
@@ -111,7 +121,15 @@ function validateHistoricalMarketFilters(values) {
   if (primary.length > 1) return "Historical markets accept only one of --tickers, --event-ticker, --series-ticker, or --mve-filter.";
 }
 
-const command = (path, summary, endpoint, resultKey, options = [], validate, resultType = "array") => ({
+function validateSeriesFilters(values) {
+  const scoped = ["category", "tags", "min_updated_ts"]
+    .some((key) => values[key] !== undefined);
+  if (!scoped) {
+    return "Series is an unpaginated endpoint; supply --category, --tags, or --min-updated-ts to keep discovery bounded.";
+  }
+}
+
+const command = (path, summary, endpoint, resultKey, options = [], validate, resultType = "array", extra = {}) => ({
   path,
   name: path.join(" "),
   summary,
@@ -119,23 +137,28 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
   resultKey,
   resultType,
   options,
-  validate
+  validate,
+  ...extra
 });
 
 export const COMMANDS = [
-  command(["series"], "List public market series.", "/series", "series", [
+  command(["series"], "List filtered public market series.", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),
     booleanOption("include-product-metadata", "include_product_metadata", "Include product metadata."),
     booleanOption("include-volume", "include_volume", "Include aggregate volume."),
     integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0})
-  ]),
+  ], validateSeriesFilters, "array", {
+    maxResponseBytes: SERIES_MAX_RESPONSE_BYTES,
+    responseTooLargeHint: "Narrow the unpaginated series query with a more specific category, tag, or recent --min-updated-ts value. Run kalshi series tags to inspect available filters."
+  }),
+  command(["series", "tags"], "List official series tags grouped by category.", "/search/tags_by_categories", "tags_by_categories", [], undefined, "object"),
   command(["series", "get"], "Get one public market series.", "/series/{series_ticker}", "series", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")
   ], undefined, "object"),
   command(["events"], "List public events.", "/events", "events", [
-    integerOption("limit", "limit", "Maximum events to return (1-200).", {min: 1, max: 200}),
+    pageLimitOption("events", {min: 1, max: 200}),
     cursorOption,
     booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside each event."),
     booleanOption("with-milestones", "with_milestones", "Include related milestones."),
@@ -155,7 +178,7 @@ export const COMMANDS = [
     ...candleTimeOptions({enum: [1, 60, 1440]})
   ], validateTimeRange),
   command(["markets"], "List public markets.", "/markets", "markets", [
-    integerOption("limit", "limit", "Maximum markets to return (0-1000).", {min: 0, max: 1000}),
+    pageLimitOption("markets", {min: 0, max: 1000}),
     cursorOption,
     tickerOption("event-ticker", "event_ticker", "Filter by one event ticker."),
     tickerOption("series-ticker", "series_ticker", "Filter by series ticker."),
@@ -191,7 +214,7 @@ export const COMMANDS = [
   ], validateTimeRange),
   command(["historical", "cutoff"], "Get Kalshi's current live-to-historical cutoff timestamps.", "/historical/cutoff", "market_settled_ts", [], undefined, "string"),
   command(["historical", "markets"], "List archived public markets.", "/historical/markets", "markets", [
-    integerOption("limit", "limit", "Maximum markets to return (0-1000).", {min: 0, max: 1000}),
+    pageLimitOption("markets", {min: 0, max: 1000}),
     cursorOption,
     stringOption("tickers", "tickers", "Comma-separated market tickers.", {csv: true, maxItems: 100, csvTickers: true}),
     tickerOption("event-ticker", "event_ticker", "Filter by one event ticker."),
@@ -214,6 +237,7 @@ export function rootHelp(version) {
     `kalshi ${version}`,
     "",
     "Public, unauthenticated, read-only Kalshi market data.",
+    "Deterministic YAML output; paginated lists default to 20 records.",
     "",
     "Usage: kalshi <command> [options]",
     "",

@@ -1,12 +1,13 @@
 # Kalshi CLI Command Contract
 
-The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, public `GET` requests, JSON output, a 30-second timeout, and a 20 MiB response limit. It does not read Kalshi environment variables or accept arbitrary hosts, methods, headers, bodies, or paths.
+The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, public `GET` requests, deterministic YAML output, a 30-second timeout, and a 20 MiB response limit. It does not read Kalshi environment variables or accept arbitrary hosts, methods, headers, bodies, or paths. Successful and failed invocations each emit at most one newline-terminated YAML document on their designated stream.
 
 ## Commands
 
 | Command | Endpoint | Required flags | Primary result |
 | --- | --- | --- | --- |
-| `kalshi series` | `/series` | none | `series[]` |
+| `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
+| `kalshi series tags` | `/search/tags_by_categories` | none | `tags_by_categories` |
 | `kalshi series get` | `/series/{series_ticker}` | `--series-ticker` | `series` |
 | `kalshi events` | `/events` | none | `events[]` |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
@@ -30,8 +31,9 @@ Run `kalshi <command> --help` for the exact optional flags. The shell uses kebab
 Use currently observed metadata; series names can change.
 
 ```powershell
-kalshi series --category Sports --tags Football --include-product-metadata
-kalshi events --series-ticker <VERIFIED_SERIES> --status open --with-nested-markets
+kalshi series tags
+kalshi series --category Sports --tags Football
+kalshi events --series-ticker <VERIFIED_SERIES> --status open
 kalshi markets --event-ticker <VERIFIED_EVENT> --status open
 kalshi markets get --ticker <VERIFIED_MARKET>
 ```
@@ -77,8 +79,12 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 
 ## Pagination and query limits
 
-- `events` limits pages to 1–200 records; market and trade list commands accept 0–1000.
+- Paginated event, market, and trade list commands apply a caller-visible default `--limit 20`.
+- `events` accepts explicit page limits of 1–200 records; market and trade list commands accept 0–1000.
+- `series tags` returns Kalshi's compact official category/tag index for discovery.
+- `series` is unpaginated, requires `--category`, `--tags`, or `--min-updated-ts`, and has a 64 KiB raw-response cap. Oversized results fail without writing partial or locally truncated data to stdout.
 - Pass the returned `cursor` into the next explicit request. There is no automatic pagination.
+- Nested markets, milestones, product metadata, and volume are opt-in response expansions.
 - `--start-ts` must be at most `--end-ts`; `--min-ts` must be at most `--max-ts`.
 - Live market timestamp-filter families cannot be mixed. Historical market primary filters are mutually exclusive.
 - A structured error and nonzero exit leave stdout empty. Local invocation errors use exit code 2; provider, network, timeout, and response-contract errors use exit code 1.

@@ -45,6 +45,7 @@ test("package metadata and dry-run contents preserve the public zero-dependency 
     "bin/kalshi.js",
     "src/main.js",
     "src/version.js",
+    "src/yaml.js",
     "skills/kalshi-cli/SKILL.md",
     "skills/kalshi-cli/agents/openai.yaml",
     "skills/kalshi-cli/references/command-contract.md",

@@ -142,6 +142,11 @@ function parseOptions(definition, args) {
 
   if (!help) {
     for (const option of definition.options) {
+      if (values[option.key] === undefined && option.defaultValue !== undefined) {
+        values[option.key] = option.defaultValue;
+      }
+    }
+    for (const option of definition.options) {
       if (option.required && values[option.key] === undefined) {
         throw new CliError("missing_required_option", `--${option.flag} is required.`, {
           command: definition.name,

@@ -4,6 +4,7 @@ import {CliError, errorDocument} from "./errors.js";
 import {executeRequest, RAW_DATA} from "./execute.js";
 import {buildRequest} from "./request.js";
 import {VERSION} from "./version.js";
+import {parseLosslessJson, renderYamlDocument} from "./yaml.js";
 
 export {VERSION};
 
@@ -15,36 +16,17 @@ function write(stream, value) {
   }
 }
 
-function writeJson(stream, value) {
-  let serialized;
-  try {
-    serialized = JSON.stringify(value, null, 2);
-  } catch {
-    serialized = JSON.stringify({
-      error: {
-        code: "serialization_error",
-        message: "Unable to serialize the CLI result safely."
-      }
-    }, null, 2);
-  }
-  write(stream, `${serialized}\n`);
+function writeYaml(stream, value) {
+  write(stream, renderYamlDocument(value));
 }
 
-function writeResultJson(stream, result) {
+function writeResultYaml(stream, result) {
   const rawData = result[RAW_DATA];
   if (typeof rawData !== "string") {
-    writeJson(stream, result);
+    writeYaml(stream, result);
     return;
   }
-
-  const {data: _data, ...envelope} = result;
-  const head = JSON.stringify(envelope, null, 2).slice(0, -1).trimEnd();
-  const data = rawData
-    .trim()
-    .split(/\r?\n/)
-    .map((line, index) => index === 0 ? line : `  ${line}`)
-    .join("\n");
-  write(stream, `${head},\n  "data": ${data}\n}\n`);
+  writeYaml(stream, {...result, data: parseLosslessJson(rawData)});
 }
 
 export async function runCli(argv, options = {}) {
@@ -67,13 +49,21 @@ export async function runCli(argv, options = {}) {
 
     const request = buildRequest(parsed.definition, parsed.values);
     const result = await executeRequest(parsed.definition, request, options);
-    writeResultJson(stdout, result);
+    try {
+      writeResultYaml(stdout, result);
+    } catch {
+      throw new CliError("serialization_error", "Unable to serialize the CLI result safely.", {exitCode: 1});
+    }
     return 0;
   } catch (caught) {
     const error = caught instanceof CliError
       ? caught
       : new CliError("unexpected_error", "An unexpected error occurred.", {exitCode: 1});
-    writeJson(stderr, errorDocument(error));
+    try {
+      writeYaml(stderr, errorDocument(error));
+    } catch {
+      write(stderr, "error:\n  code: serialization_error\n  message: Unable to serialize the CLI error safely.\n");
+    }
     return error.exitCode ?? 1;
   }
 }

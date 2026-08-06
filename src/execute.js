@@ -121,6 +121,9 @@ function enrich(error, definition, request) {
   error.command ??= definition.name;
   error.endpoint ??= request.endpoint;
   error.query ??= request.query;
+  if (error.code === "response_too_large" && definition.responseTooLargeHint) {
+    error.hint ??= definition.responseTooLargeHint;
+  }
   return error;
 }
 
@@ -128,7 +131,8 @@ export async function executeRequest(definition, request, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const now = options.now ?? (() => new Date());
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+  const requestedMaxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+  const maxResponseBytes = Math.min(requestedMaxResponseBytes, definition.maxResponseBytes ?? requestedMaxResponseBytes);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(new DOMException("The request timed out.", "TimeoutError")), timeoutMs);
   const requestedAt = now().toISOString();
