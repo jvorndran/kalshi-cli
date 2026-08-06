@@ -1,3 +1,4 @@
+import {Buffer} from "node:buffer";
 import {parseArguments} from "./args.js";
 import {commandHelp, rootHelp} from "./commands.js";
 import {CliError, errorDocument} from "./errors.js";
@@ -7,6 +8,8 @@ import {VERSION} from "./version.js";
 import {parseLosslessJson, renderYamlDocument} from "./yaml.js";
 
 export {VERSION};
+
+export const MAX_OUTPUT_BYTES = 64 * 1024;
 
 function write(stream, value) {
   try {
@@ -20,13 +23,25 @@ function writeYaml(stream, value) {
   write(stream, renderYamlDocument(value));
 }
 
-function writeResultYaml(stream, result) {
+function renderResultYaml(result) {
   const rawData = result[RAW_DATA];
-  if (typeof rawData !== "string") {
-    writeYaml(stream, result);
-    return;
+  const rendered = renderYamlDocument(
+    typeof rawData === "string" ? {...result, data: parseLosslessJson(rawData)} : result
+  );
+  if (Buffer.byteLength(rendered, "utf8") > MAX_OUTPUT_BYTES) {
+    throw new CliError("output_too_large", `Formatted YAML output exceeds the ${MAX_OUTPUT_BYTES}-byte safety limit.`, {
+      exitCode: 1,
+      command: result.command,
+      endpoint: result.endpoint,
+      query: result.query,
+      hint: "Use a smaller --limit, narrower filter, or shorter candle range."
+    });
   }
-  writeYaml(stream, {...result, data: parseLosslessJson(rawData)});
+  return rendered;
+}
+
+function writeResultYaml(stream, result) {
+  write(stream, renderResultYaml(result));
 }
 
 export async function runCli(argv, options = {}) {
@@ -51,7 +66,8 @@ export async function runCli(argv, options = {}) {
     const result = await executeRequest(parsed.definition, request, options);
     try {
       writeResultYaml(stdout, result);
-    } catch {
+    } catch (error) {
+      if (error instanceof CliError) throw error;
       throw new CliError("serialization_error", "Unable to serialize the CLI result safely.", {exitCode: 1});
     }
     return 0;

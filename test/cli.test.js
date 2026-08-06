@@ -5,7 +5,7 @@ import test from "node:test";
 import {parseArguments} from "../src/args.js";
 import {COMMANDS, SERIES_MAX_RESPONSE_BYTES} from "../src/commands.js";
 import {executeRequest} from "../src/execute.js";
-import {runCli} from "../src/main.js";
+import {MAX_OUTPUT_BYTES, runCli} from "../src/main.js";
 import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
@@ -218,9 +218,29 @@ test("paginated list commands default to a small caller-visible page", () => {
   for (const argv of [["events"], ["markets"], ["markets", "trades"], ["historical", "markets"], ["historical", "trades"]]) {
     const parsed = parseArguments(argv);
     const request = buildRequest(parsed.definition, parsed.values);
-    assert.equal(request.query.limit, 20, parsed.definition.name);
-    assert.match(request.url, /[?&]limit=20(?:&|$)/);
+    assert.equal(request.query.limit, 10, parsed.definition.name);
+    assert.match(request.url, /[?&]limit=10(?:&|$)/);
   }
+});
+
+test("series help explains its required filter and safety cap", async () => {
+  const result = await invoke(["series", "--help"]);
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /List filtered public market series \(requires a filter\)/);
+  assert.match(result.stdout, /Supply one of --category, --tags, or --min-updated-ts/);
+  assert.match(result.stdout, /over 64 KiB/);
+});
+
+test("formatted YAML output is capped without writing partial stdout", async () => {
+  const result = await invoke(["markets", "--limit", "1"], {
+    fetchImpl: async () => jsonResponse({markets: [{ticker: "TEST", padding: "x".repeat(MAX_OUTPUT_BYTES)}]})
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(yamlErrorCode(result.stderr), "output_too_large");
+  assert.match(yamlScalar(result.stderr, "message", 2), /Formatted YAML output exceeds/);
+  assert.match(yamlScalar(result.stderr, "hint", 2), /smaller --limit/);
 });
 
 test("batch candles accept arbitrary positive minute intervals and normalize ticker CSV", () => {

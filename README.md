@@ -42,7 +42,7 @@ After choosing and verifying a ticker from those results:
 ```sh
 kalshi markets get --ticker "MARKET_TICKER_FROM_DISCOVERY"
 kalshi markets orderbook --ticker "MARKET_TICKER_FROM_DISCOVERY" --depth 10
-kalshi markets trades --ticker "MARKET_TICKER_FROM_DISCOVERY" --limit 100
+kalshi markets trades --ticker "MARKET_TICKER_FROM_DISCOVERY" --limit 10
 ```
 
 Do not construct a market ticker from a team name. Verify the returned title, participants, selected side, threshold, close time, status, and resolution rules against the exact question you are researching.
@@ -99,13 +99,13 @@ kalshi series --category Sports --tags Football
 
 To prevent context flooding without altering Kalshi's response, `kalshi series` requires at least one of `--category`, `--tags`, or `--min-updated-ts` and caps the raw response at 64 KiB. A broader result fails with structured YAML on stderr and leaves stdout empty; refine the filter rather than receiving locally truncated provider data.
 
-Paginated event, market, and trade lists default to 20 records. The applied default appears in `query` and `source_url`; use `--limit` when a different page size is intentional.
+Paginated event, market, and trade lists default to 10 records. The applied default appears in `query` and `source_url`; use `--limit` when a different page size is intentional. Every successful command also refuses to write more than 64 KiB of formatted YAML; split large market lists or candle ranges into separate requests.
 
 Pagination is always explicit. Read the provider cursor from `data` and pass it to the next request:
 
 ```sh
-kalshi events --series-ticker KXNCAAFGAME --limit 100
-kalshi events --series-ticker KXNCAAFGAME --limit 100 --cursor "CURSOR_FROM_PREVIOUS_RESPONSE"
+kalshi events --series-ticker KXNCAAFGAME --limit 10
+kalshi events --series-ticker KXNCAAFGAME --limit 10 --cursor "CURSOR_FROM_PREVIOUS_RESPONSE"
 ```
 
 There is no `--all`, automatic pagination, hidden retry, or implicit backoff. Nested markets, milestones, product metadata, and volume remain opt-in because they can materially enlarge a response. On a `429`, the caller decides whether and when to retry.
@@ -115,7 +115,7 @@ Older records move from live routes to historical routes. Check the current boun
 ```sh
 kalshi historical cutoff
 kalshi historical markets --series-ticker KXNCAAFGAME
-kalshi historical trades --ticker "ARCHIVED_MARKET_TICKER" --limit 100
+kalshi historical trades --ticker "ARCHIVED_MARKET_TICKER" --limit 10
 kalshi historical markets candlesticks --ticker "ARCHIVED_MARKET_TICKER" --start-ts 1785542400 --end-ts 1786147200 --period-interval 60
 ```
 
@@ -137,7 +137,7 @@ A candle close or recent trade is historical evidence, not necessarily an execut
 
 ## Safety and scope
 
-The implementation fixes the host to `https://external-api.kalshi.com/trade-api/v2`, allows only documented public `GET` routes, rejects redirects, omits credentials, times out after 30 seconds, and limits responses to 20 MiB. The unpaginated series list has a stricter 64 KiB cap.
+The implementation fixes the host to `https://external-api.kalshi.com/trade-api/v2`, allows only documented public `GET` routes, rejects redirects, omits credentials, times out after 30 seconds, limits raw responses to 20 MiB, and limits successful formatted YAML output to 64 KiB.
 
 It does not provide:
 

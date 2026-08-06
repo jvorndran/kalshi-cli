@@ -1,6 +1,6 @@
 # Kalshi CLI Command Contract
 
-The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, public `GET` requests, deterministic YAML output, a 30-second timeout, and a 20 MiB response limit. It does not read Kalshi environment variables or accept arbitrary hosts, methods, headers, bodies, or paths. Successful and failed invocations each emit at most one newline-terminated YAML document on their designated stream.
+The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, public `GET` requests, deterministic YAML output, a 30-second timeout, a 20 MiB raw-response limit, and a 64 KiB formatted-output limit. It does not read Kalshi environment variables or accept arbitrary hosts, methods, headers, bodies, or paths. Successful and failed invocations each emit at most one newline-terminated YAML document on their designated stream.
 
 ## Commands
 
@@ -45,7 +45,7 @@ Candidate series may describe game winners, spread thresholds, or total threshol
 ```powershell
 kalshi markets get --ticker <VERIFIED_MARKET>
 kalshi markets orderbook --ticker <VERIFIED_MARKET> --depth 10
-kalshi markets trades --ticker <VERIFIED_MARKET> --limit 100
+kalshi markets trades --ticker <VERIFIED_MARKET> --limit 10
 ```
 
 Keep these as separately observed snapshots. Orderbook depth accepts `0` through `100`; `0` requests all available levels. The orderbook returns YES and NO bids, not guaranteed executable asks. Trades are prints and may be stale. Current market fields can also be stale or thin, so preserve timestamps, liquidity, and spread evidence.
@@ -72,19 +72,20 @@ If the live route no longer covers the market:
 kalshi historical cutoff
 kalshi historical markets --series-ticker <VERIFIED_SERIES>
 kalshi historical markets candlesticks --ticker <VERIFIED_MARKET> --start-ts <UNIX_SECONDS> --end-ts <UNIX_SECONDS> --period-interval 60
-kalshi historical trades --ticker <VERIFIED_MARKET> --limit 100
+kalshi historical trades --ticker <VERIFIED_MARKET> --limit 10
 ```
 
 Live and historical candle schemas differ. Preserve the raw response rather than coercing one into the other during retrieval.
 
 ## Pagination and query limits
 
-- Paginated event, market, and trade list commands apply a caller-visible default `--limit 20`.
+- Paginated event, market, and trade list commands apply a caller-visible default `--limit 10`.
 - `events` accepts explicit page limits of 1–200 records; market and trade list commands accept 0–1000.
 - `series tags` returns Kalshi's compact official category/tag index for discovery.
 - `series` is unpaginated, requires `--category`, `--tags`, or `--min-updated-ts`, and has a 64 KiB raw-response cap. Oversized results fail without writing partial or locally truncated data to stdout.
 - Pass the returned `cursor` into the next explicit request. There is no automatic pagination.
 - Nested markets, milestones, product metadata, and volume are opt-in response expansions.
+- Any successful formatted response over 64 KiB fails with `output_too_large`; lower `--limit`, narrow filters, or shorten candle ranges.
 - `--start-ts` must be at most `--end-ts`; `--min-ts` must be at most `--max-ts`.
 - Live market timestamp-filter families cannot be mixed. Historical market primary filters are mutually exclusive.
 - A structured error and nonzero exit leave stdout empty. Local invocation errors use exit code 2; provider, network, timeout, and response-contract errors use exit code 1.

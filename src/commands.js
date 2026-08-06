@@ -35,7 +35,7 @@ const cursorOption = stringOption("cursor", "cursor", "Pagination cursor from th
   ascii: true
 });
 
-export const DEFAULT_PAGE_LIMIT = 20;
+export const DEFAULT_PAGE_LIMIT = 10;
 export const SERIES_MAX_RESPONSE_BYTES = 64 * 1024;
 
 const pageLimitOption = (subject, {min, max}) => integerOption(
@@ -142,7 +142,7 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 });
 
 export const COMMANDS = [
-  command(["series"], "List filtered public market series.", "/series", "series", [
+  command(["series"], "List filtered public market series (requires a filter).", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),
     booleanOption("include-product-metadata", "include_product_metadata", "Include product metadata."),
@@ -150,7 +150,11 @@ export const COMMANDS = [
     integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0})
   ], validateSeriesFilters, "array", {
     maxResponseBytes: SERIES_MAX_RESPONSE_BYTES,
-    responseTooLargeHint: "Narrow the unpaginated series query with a more specific category, tag, or recent --min-updated-ts value. Run kalshi series tags to inspect available filters."
+    responseTooLargeHint: "Narrow the unpaginated series query with a more specific category, tag, or recent --min-updated-ts value. Run kalshi series tags to inspect available filters.",
+    helpNotes: [
+      "Supply one of --category, --tags, or --min-updated-ts.",
+      "Unpaginated responses over 64 KiB are rejected before stdout is written."
+    ]
   }),
   command(["series", "tags"], "List official series tags grouped by category.", "/search/tags_by_categories", "tags_by_categories", [], undefined, "object"),
   command(["series", "get"], "Get one public market series.", "/series/{series_ticker}", "series", [
@@ -237,7 +241,7 @@ export function rootHelp(version) {
     `kalshi ${version}`,
     "",
     "Public, unauthenticated, read-only Kalshi market data.",
-    "Deterministic YAML output; paginated lists default to 20 records.",
+    "Deterministic YAML output; paginated lists default to 10 records and are capped at 64 KiB.",
     "",
     "Usage: kalshi <command> [options]",
     "",
@@ -259,6 +263,7 @@ export function commandHelp(definition) {
     "",
     `Usage: kalshi ${definition.name}${definition.options.length ? " [options]" : ""}`,
     ...(rows.length ? ["", "Options:", ...rows] : []),
+    ...(definition.helpNotes?.length ? ["", "Notes:", ...definition.helpNotes.map((note) => `  ${note}`)] : []),
     "",
     "  --help".padEnd(42) + "Show this help."
   ].join("\n");

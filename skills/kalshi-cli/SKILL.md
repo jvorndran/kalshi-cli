@@ -16,7 +16,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
 2. Discover the contract instead of constructing a ticker.
    - Run `kalshi series tags` to inspect the compact official category/tag index, then use `--category`, `--tags`, or `--min-updated-ts`; the CLI rejects an unfiltered full-catalog request because Kalshi does not paginate that route.
    - If a filtered series response exceeds its 64 KiB safety cap, refine the filter. Never work around the guard by fetching and truncating Kalshi data elsewhere.
-   - Narrow through `events` and `markets`. Their default page size is 20; request a larger `--limit` only when the additional records are needed.
+   - Narrow through `events` and `markets`. Their default page size is 10; request a larger `--limit` only when the additional records are needed, and split requests if the formatted YAML output cap is reached.
    - Verify the series, event, market ticker, title, close time, status, and resolution rules against the exact user question.
    - Stop at `unresolved_identity` when the game, contract side, threshold, or rules cannot be matched safely.
 
@@ -29,6 +29,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
 
 4. Preserve provenance and provider precision.
    - Parse stdout and stderr as one newline-terminated YAML document. Retain `command`, `endpoint`, `query`, `source_url`, `requested_at`, `observed_at`, `response_sha256`, `count`, and unchanged `data`.
+   - Successful formatted YAML responses are capped at 64 KiB. A structured `output_too_large` error means the caller should narrow the filter, lower `--limit`, or shorten a candle range.
    - Preserve fixed-point price, volume, and open-interest strings exactly. Convert them only in a separate, stated calculation.
    - Keep each response's caller-controlled cursor. Never invent `--all`, automatic pagination, or implicit retries. Leave nested markets, milestones, product metadata, and volume disabled unless the task needs them.
    - Store immutable raw captures outside version control unless the user explicitly authorizes a suitable artifact destination and provider terms permit redistribution.
