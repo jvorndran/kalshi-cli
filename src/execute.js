@@ -109,6 +109,9 @@ function validateShape(definition, body) {
   if (definition.resultType === "string" && typeof value !== "string") {
     throw new CliError("upstream_shape_error", `Kalshi response field ${definition.resultKey} is not a string.`, {exitCode: 1});
   }
+  if (definition.resultType === "boolean" && typeof value !== "boolean") {
+    throw new CliError("upstream_shape_error", `Kalshi response field ${definition.resultKey} is not a boolean.`, {exitCode: 1});
+  }
 }
 
 function countPrimary(definition, body) {

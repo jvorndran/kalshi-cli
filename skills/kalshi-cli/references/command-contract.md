@@ -6,6 +6,8 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 
 | Command | Endpoint | Required flags | Primary result |
 | --- | --- | --- | --- |
+| `kalshi exchange status` | `/exchange/status` | none | top-level availability fields |
+| `kalshi exchange schedule` | `/exchange/schedule` | none | `schedule` |
 | `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
 | `kalshi series tags` | `/search/tags_by_categories` | none | `tags_by_categories` |
 | `kalshi series get` | `/series/{series_ticker}` | `--series-ticker` | `series` |
@@ -89,3 +91,7 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 - `--start-ts` must be at most `--end-ts`; `--min-ts` must be at most `--max-ts`.
 - Live market timestamp-filter families cannot be mixed. Historical market primary filters are mutually exclusive.
 - A structured error and nonzero exit leave stdout empty. Local invocation errors use exit code 2; provider, network, timeout, and response-contract errors use exit code 1.
+
+## Exchange availability
+
+`kalshi exchange status` and `kalshi exchange schedule` each make one public, unauthenticated GET with no query parameters. Both return `count: 1`, including when `exchange_active` is false. Availability flags, optional resume estimates, per-index status, standard hours, maintenance windows, and unknown provider fields remain unchanged in `data`. A successful status response reports availability; inactive trading is not a CLI error. Neither command automatically retries, polls, or gates other commands.

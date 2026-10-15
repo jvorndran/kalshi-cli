@@ -63,8 +63,10 @@ test("root help is offline and lists the public command surface", async () => {
   assert.equal(calls, 0);
 });
 
-test("all 17 commands resolve to the fixed endpoint and response contract", () => {
+test("all 19 commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
+    [["exchange", "status"], "/exchange/status", "boolean"],
+    [["exchange", "schedule"], "/exchange/schedule", "object"],
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
@@ -91,6 +93,55 @@ test("all 17 commands resolve to the fixed endpoint and response contract", () =
     assert.equal(request.endpoint, endpoint, parsed.definition.name);
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
+  }
+});
+
+test("exchange commands preserve status and schedule data with one unauthenticated GET", async () => {
+  for (const [name, body] of [
+    ["status", {exchange_active: false, trading_active: false, exchange_estimated_resume_time: null, unknown: "0.0100"}],
+    ["schedule", {schedule: {standard_hours: [], maintenance_windows: [{start_datetime: "2026-10-15T00:00:00Z", end_datetime: "2026-10-15T01:00:00Z"}]}, unknown: null}]
+  ]) {
+    const parsed = parseArguments(["exchange", name]);
+    const request = buildRequest(parsed.definition, parsed.values);
+    let calls = 0;
+    const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, options) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/exchange/${name}`);
+      assert.equal(options.method, "GET");
+      assert.equal(options.credentials, "omit");
+      assert.equal(options.headers.authorization, undefined);
+      return jsonResponse(body);
+    }});
+    assert.equal(calls, 1);
+    assert.deepEqual(result.query, {});
+    assert.deepEqual(result.data, body);
+    assert.equal(result.count, 1);
+    const cli = await invoke(["exchange", name], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(cli.exitCode, 0);
+    assert.equal(cli.stderr, "");
+    assert.match(cli.stdout, /count: 1/);
+    assert.match(cli.stdout, /unknown:/);
+  }
+});
+
+test("exchange shape failures leave stdout empty", async () => {
+  for (const [name, body] of [["status", {}], ["status", {exchange_active: "false"}], ["status", {exchange_active: null}], ["schedule", {schedule: []}]]) {
+    const result = await invoke(["exchange", name], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+});
+
+test("exchange help and invalid options never request data", async () => {
+  for (const name of ["status", "schedule"]) {
+    let calls = 0;
+    const options = {fetchImpl: async () => { calls += 1; }};
+    assert.equal((await invoke(["exchange", name, "--help"], options)).exitCode, 0);
+    const invalid = await invoke(["exchange", name, "--limit", "10"], options);
+    assert.equal(invalid.exitCode, 2);
+    assert.equal(invalid.stdout, "");
+    assert.equal(calls, 0);
   }
 });
 

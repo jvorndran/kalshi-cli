@@ -51,6 +51,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 
 | Family | Commands | Purpose |
 | --- | --- | --- |
+| Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
 | Series | `series`, `series tags`, `series get` | Discover filters and market families, then inspect one series. |
 | Events | `events`, `events get`, `events candlesticks` | Discover events, inspect event metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
@@ -181,3 +182,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for project boundaries and [RELEASING.md]
 Use [GitHub Issues](https://github.com/jvorndran/kalshi-cli/issues) for reproducible bugs and narrowly scoped feature requests. Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/jvorndran/kalshi-cli/security/advisories/new); do not post exploit details or credentials in an issue.
 
 Released under the [MIT License](LICENSE).
+
+## Exchange availability
+
+```sh
+kalshi exchange status
+kalshi exchange schedule
+```
+
+These commands each make one public GET with no parameters or credentials. Status reports exchange and trading availability; schedule reports standard trading hours and maintenance windows. Both preserve the complete provider response in `data` and emit `count: 1`, even when the exchange is inactive. A false availability flag is a successful observation, not a CLI error. See the official [status](https://docs.kalshi.com/api-reference/exchange/get-exchange-status) and [schedule](https://docs.kalshi.com/api-reference/exchange/get-exchange-schedule) contracts.

@@ -142,6 +142,8 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 });
 
 export const COMMANDS = [
+  command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
+  command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
   command(["series"], "List filtered public market series (requires a filter).", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),

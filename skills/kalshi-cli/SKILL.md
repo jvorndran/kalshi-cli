@@ -10,6 +10,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
 ## Workflow
 
 1. Confirm the tool before retrieval.
+   - Use `kalshi exchange status` for public availability and `kalshi exchange schedule` for trading hours and maintenance windows when assessing an interruption. An inactive flag is data, not a command failure; these commands do not gate or retry other requests.
    - Run `kalshi --version` and the smallest relevant `--help` command.
    - If `kalshi` is unavailable, report that limitation. Do not replace it with an authenticated client, arbitrary HTTP wrapper, or trading SDK.
 
