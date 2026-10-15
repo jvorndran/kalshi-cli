@@ -63,12 +63,13 @@ test("root help is offline and lists the public command surface", async () => {
   assert.equal(calls, 0);
 });
 
-test("all 19 commands resolve to the fixed endpoint and response contract", () => {
+test("all 20 commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
+    [["series", "sports"], "/search/filters_by_sport", "object"],
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
     [["events"], "/events", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
@@ -94,6 +95,54 @@ test("all 19 commands resolve to the fixed endpoint and response contract", () =
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
   }
+});
+
+test("sports discovery preserves filters, provider ordering, nulls, and unknown fields", async () => {
+  const body = {
+    filters_by_sports: {Football: {scopes: ["Game"], competitions: ["College"]}},
+    sport_ordering: ["Football", "Basketball"],
+    unknown: {precise: "0.0100", nullable: null}
+  };
+  const parsed = parseArguments(["series", "sports"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {});
+  let calls = 0;
+  const fetchImpl = async (url, options) => {
+    calls += 1;
+    assert.equal(url, `${BASE_URL}/search/filters_by_sport`);
+    assert.equal(options.method, "GET");
+    assert.equal(options.credentials, "omit");
+    assert.equal(Object.keys(options.headers).some((key) => /authorization|kalshi-access/i.test(key)), false);
+    return jsonResponse(body);
+  };
+  const result = await executeRequest(parsed.definition, request, {fetchImpl});
+  assert.deepEqual(result.data, body);
+  assert.equal(result.count, 1);
+  const cli = await invoke(["series", "sports"], {fetchImpl});
+  assert.equal(cli.exitCode, 0);
+  assert.equal(cli.stderr, "");
+  assert.match(cli.stdout, /filters_by_sports:/);
+  assert.match(cli.stdout, /sport_ordering:/);
+  assert.match(cli.stdout, /nullable: null/);
+  assert.equal(calls, 2);
+});
+
+test("sports discovery validates the provider shape and remains offline for help and invalid flags", async () => {
+  for (const body of [{}, {filters_by_sports: null}, {filters_by_sports: []}, {filters_by_sports: "Football"}]) {
+    const result = await invoke(["series", "sports"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("unexpected network"); };
+  const help = await invoke(["series", "sports", "--help"], {fetchImpl});
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /series sports/);
+  const invalid = await invoke(["series", "sports", "--category", "Sports"], {fetchImpl});
+  assert.equal(invalid.exitCode, 2);
+  assert.equal(invalid.stdout, "");
+  assert.equal(calls, 0);
 });
 
 test("exchange commands preserve status and schedule data with one unauthenticated GET", async () => {
