@@ -32,6 +32,7 @@ Discover rather than guess identifiers:
 
 ```sh
 kalshi series tags
+kalshi series sports
 kalshi series --category Sports --tags Football
 kalshi events --series-ticker KXNCAAFGAME --status open
 kalshi markets --series-ticker KXNCAAFGAME --status open
@@ -52,12 +53,14 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Family | Commands | Purpose |
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
-| Series | `series`, `series tags`, `series get` | Discover filters and market families, then inspect one series. |
+| Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
 | Events | `events`, `events get`, `events candlesticks` | Discover events, inspect event metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
 | Historical | `historical cutoff`, `historical markets`, `historical markets get`, `historical markets candlesticks`, `historical trades` | Find the live/archive boundary and retrieve archived public data. |
 
 Run `kalshi <command> --help` for exact options. The complete endpoint and flag contract is in the [command reference](skills/kalshi-cli/references/command-contract.md).
+
+`kalshi series sports` retrieves the official sport scope and competition index from `/search/filters_by_sport` in one public request without flags. The response preserves `filters_by_sports`, provider `sport_ordering`, and any additional fields inside `data`. Use this metadata to discover sports terminology; it does not identify a contract or add sport filters to other commands.
 
 ## Output contract
 

@@ -159,6 +159,7 @@ export const COMMANDS = [
     ]
   }),
   command(["series", "tags"], "List official series tags grouped by category.", "/search/tags_by_categories", "tags_by_categories", [], undefined, "object"),
+  command(["series", "sports"], "Discover official sport scopes, competitions, and sport ordering.", "/search/filters_by_sport", "filters_by_sports", [], undefined, "object"),
   command(["series", "get"], "Get one public market series.", "/series/{series_ticker}", "series", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")

@@ -15,6 +15,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
    - If `kalshi` is unavailable, report that limitation. Do not replace it with an authenticated client, arbitrary HTTP wrapper, or trading SDK.
 
 2. Discover the contract instead of constructing a ticker.
+   - Run `kalshi series sports` for the official sport scopes, competitions, and `sport_ordering`. It accepts no flags and makes one public GET; use the metadata to guide discovery, then verify actual event and market identity.
    - Run `kalshi series tags` to inspect the compact official category/tag index, then use `--category`, `--tags`, or `--min-updated-ts`; the CLI rejects an unfiltered full-catalog request because Kalshi does not paginate that route.
    - If a filtered series response exceeds its 64 KiB safety cap, refine the filter. Never work around the guard by fetching and truncating Kalshi data elsewhere.
    - Narrow through `events` and `markets`. Their default page size is 10; request a larger `--limit` only when the additional records are needed, and split requests if the formatted YAML output cap is reached.
