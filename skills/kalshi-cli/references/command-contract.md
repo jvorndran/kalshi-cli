@@ -8,6 +8,8 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | --- | --- | --- | --- |
 | `kalshi exchange status` | `/exchange/status` | none | top-level availability fields |
 | `kalshi exchange schedule` | `/exchange/schedule` | none | `schedule` |
+| `kalshi milestones` | `/milestones` | none | `milestones[]` |
+| `kalshi milestones get` | `/milestones/{milestone_id}` | `--milestone-id` | `milestone` |
 | `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
 | `kalshi series tags` | `/search/tags_by_categories` | none | `tags_by_categories` |
 | `kalshi series sports` | `/search/filters_by_sport` | none | `filters_by_sports` plus `sport_ordering` |
@@ -92,6 +94,10 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 - `--start-ts` must be at most `--end-ts`; `--min-ts` must be at most `--max-ts`.
 - Live market timestamp-filter families cannot be mixed. Historical market primary filters are mutually exclusive.
 - A structured error and nonzero exit leave stdout empty. Local invocation errors use exit code 2; provider, network, timeout, and response-contract errors use exit code 1.
+
+## Milestone discovery
+
+`milestones` accepts `--limit` (default 10, CLI bounds 1–200), `--cursor`, `--minimum-start-date` (RFC3339 scheduled-start bound, passed unchanged for provider validation), `--category`, `--competition`, `--type`, `--source-id`, `--related-event-ticker`, and `--min-updated-ts` (non-negative Unix seconds, filtering metadata update time independently of scheduled start). Flags map directly to the corresponding snake_case query names. `milestones get` requires a discovered `--milestone-id` (1–200 letters, numbers, periods, underscores, or hyphens, starting with a letter or number) and sends no query. Both make exactly one public unauthenticated GET and preserve timing, related/primary event tickers, nested details, source IDs, nulls, and unknown fields inside `data`. Lists never follow cursors automatically.
 
 ## Exchange availability
 
