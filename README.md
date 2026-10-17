@@ -53,6 +53,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Family | Commands | Purpose |
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
+| Milestones | `milestones`, `milestones get` | Discover scheduled milestones and inspect their related event tickers and provider details. |
 | Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
 | Events | `events`, `events get`, `events candlesticks` | Discover events, inspect event metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
@@ -61,6 +62,8 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 Run `kalshi <command> --help` for exact options. The complete endpoint and flag contract is in the [command reference](skills/kalshi-cli/references/command-contract.md).
 
 `kalshi series sports` retrieves the official sport scope and competition index from `/search/filters_by_sport` in one public request without flags. The response preserves `filters_by_sports`, provider `sport_ordering`, and any additional fields inside `data`. Use this metadata to discover sports terminology; it does not identify a contract or add sport filters to other commands.
+
+Use `kalshi milestones --category Sports --type football_game` to discover milestone IDs and related event tickers, then `kalshi milestones get --milestone-id ID` for details. Optional discovery filters include `--competition`, `--source-id`, `--related-event-ticker`, and `--min-updated-ts`. Each invocation makes one public GET; lists default to 10 records, accept a CLI page bound of 1–200, and continue only with an explicit `--cursor`. Competition and source names must come from provider data. An empty result does not establish the absence of a game or contract.
 
 ## Output contract
 

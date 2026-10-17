@@ -63,10 +63,12 @@ test("root help is offline and lists the public command surface", async () => {
   assert.equal(calls, 0);
 });
 
-test("all 20 commands resolve to the fixed endpoint and response contract", () => {
+test("all commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["milestones"], "/milestones", "array"],
+    [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "sports"], "/search/filters_by_sport", "object"],
@@ -87,7 +89,7 @@ test("all 20 commands resolve to the fixed endpoint and response contract", () =
     [["historical", "trades"], "/historical/trades", "array"]
   ];
   assert.equal(COMMANDS.length, cases.length);
-  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "Sports"].includes(part)).join(" ")));
+  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "MILESTONE", "Sports"].includes(part)).join(" ")));
   for (const [argv, endpoint, resultType] of cases) {
     const parsed = parseArguments(argv);
     const request = buildRequest(parsed.definition, parsed.values);
@@ -95,6 +97,82 @@ test("all 20 commands resolve to the fixed endpoint and response contract", () =
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
   }
+});
+
+test("milestone discovery maps filters, preserves the response, and leaves pagination caller-controlled", async () => {
+  const argv = ["milestones", "--category", "Sports", "--competition", "College Football", "--type", "football_game", "--source-id", "provider:123", "--related-event-ticker", "EVENT", "--min-updated-ts", "0", "--cursor", "page+2/="];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {limit: 10, cursor: "page+2/=", category: "Sports", competition: "College Football", type: "football_game", source_id: "provider:123", related_event_ticker: "EVENT", min_updated_ts: 0});
+  const body = {milestones: [{id: "abc-123", start_date: "2026-10-17T19:00:00Z", related_event_tickers: ["EVENT"], details: {score: null, precise: "0.0100"}}], cursor: "next", unknown: false};
+  let calls = 0;
+  const fetchImpl = async (url, options) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/milestones");
+    assert.equal(new URL(url).searchParams.get("competition"), "College Football");
+    assert.equal(new URL(url).searchParams.get("cursor"), "page+2/=");
+    assert.equal(options.method, "GET");
+    assert.equal(options.credentials, "omit");
+    assert.equal(Object.keys(options.headers).some((key) => /authorization|kalshi-access/i.test(key)), false);
+    return jsonResponse(body);
+  };
+  const result = await executeRequest(parsed.definition, request, {fetchImpl});
+  assert.deepEqual(result.data, body);
+  assert.equal(result.count, 1);
+  assert.equal(calls, 1);
+  const cli = await invoke(argv, {fetchImpl});
+  assert.equal(cli.exitCode, 0);
+  assert.equal(cli.stderr, "");
+  assert.match(cli.stdout, /score: null/);
+  assert.match(cli.stdout, /precise: "0.0100"/);
+  assert.match(cli.stdout, /cursor: next/);
+  assert.equal(calls, 2);
+});
+
+test("milestone lookup uses a discovered ID and validates both response shapes", async () => {
+  const parsed = parseArguments(["milestones", "get", "--milestone-id", "abc-123"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.equal(request.url, `${BASE_URL}/milestones/abc-123`);
+  assert.deepEqual(request.query, {});
+  const body = {milestone: {id: "abc-123", details: {unknown: null}}};
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async () => jsonResponse(body)});
+  assert.deepEqual(result.data, body);
+  assert.equal(result.count, 1);
+  for (const [argv, bodies] of [
+    [["milestones"], [{}, {milestones: {}}, {milestones: null}]],
+    [["milestones", "get", "--milestone-id", "abc-123"], [{}, {milestone: []}, {milestone: null}]]
+  ]) {
+    for (const invalid of bodies) {
+      const cli = await invoke(argv, {fetchImpl: async () => jsonResponse(invalid)});
+      assert.equal(cli.exitCode, 1);
+      assert.equal(cli.stdout, "");
+      assert.equal(yamlErrorCode(cli.stderr), "upstream_shape_error");
+    }
+  }
+  const empty = await invoke(["milestones"], {fetchImpl: async () => jsonResponse({milestones: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("milestone help and invalid invocations never fetch", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; };
+  for (const argv of [["milestones", "--help"], ["milestones", "get", "--help"]]) {
+    const result = await invoke(argv, {fetchImpl});
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /milestone/i);
+  }
+  for (const argv of [
+    ["milestones", "get"], ["milestones", "get", "--milestone-id", "../orders"],
+    ["milestones", "--limit", "0"], ["milestones", "--limit", "201"],
+    ["milestones", "--min-updated-ts", "-1"], ["milestones", "--category", " "],
+    ["milestones", "--all"], ["milestones", "--url", "https://example.com"]
+  ]) {
+    const result = await invoke(argv, {fetchImpl});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  assert.equal(calls, 0);
 });
 
 test("sports discovery preserves filters, provider ordering, nulls, and unknown fields", async () => {

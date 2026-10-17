@@ -144,6 +144,19 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["milestones"], "Discover public milestones and their related events.", "/milestones", "milestones", [
+    pageLimitOption("milestones", {min: 1, max: 200}),
+    cursorOption,
+    stringOption("category", "category", "Filter by milestone category."),
+    stringOption("competition", "competition", "Filter by competition, using the provider's exact name."),
+    stringOption("type", "type", "Filter by milestone type (for example football_game)."),
+    stringOption("source-id", "source_id", "Filter by provider source ID."),
+    tickerOption("related-event-ticker", "related_event_ticker", "Filter by a related event ticker."),
+    integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0})
+  ]),
+  command(["milestones", "get"], "Inspect one public milestone by its discovered ID.", "/milestones/{milestone_id}", "milestone", [
+    tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"})
+  ], undefined, "object"),
   command(["series"], "List filtered public market series (requires a filter).", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),
