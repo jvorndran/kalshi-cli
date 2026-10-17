@@ -129,6 +129,29 @@ test("milestone discovery maps filters, preserves the response, and leaves pagin
   assert.equal(calls, 2);
 });
 
+test("milestones can be bounded by scheduled start independently of metadata updates", async () => {
+  const timestamp = "2026-10-17T12:34:56.123-04:00";
+  const parsed = parseArguments(["milestones", "--minimum-start-date", timestamp, "--min-updated-ts", "0"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {limit: 10, minimum_start_date: timestamp, min_updated_ts: 0});
+  let calls = 0;
+  const result = await invoke(["milestones", "--minimum-start-date", timestamp], {
+    fetchImpl: async (url) => {
+      calls += 1;
+      assert.equal(new URL(url).searchParams.get("minimum_start_date"), timestamp);
+      assert.equal(new URL(url).searchParams.has("min_updated_ts"), false);
+      return jsonResponse({milestones: [], cursor: ""});
+    }
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.equal(calls, 1);
+  const blank = await invoke(["milestones", "--minimum-start-date", " "], {fetchImpl: async () => { calls += 1; }});
+  assert.equal(blank.exitCode, 2);
+  assert.equal(blank.stdout, "");
+  assert.equal(calls, 1);
+});
+
 test("milestone lookup uses a discovered ID and validates both response shapes", async () => {
   const parsed = parseArguments(["milestones", "get", "--milestone-id", "abc-123"]);
   const request = buildRequest(parsed.definition, parsed.values);

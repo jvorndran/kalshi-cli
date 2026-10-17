@@ -23,7 +23,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
    - Stop at `unresolved_identity` when the game, contract side, threshold, or rules cannot be matched safely.
 
 3. Retrieve only the evidence needed.
-   - Use `milestones --category Sports --type football_game` for scheduled milestone IDs and related event tickers, optionally scoped by `--competition`, `--source-id`, `--related-event-ticker`, or `--min-updated-ts`. Names come from provider data; an empty result is not proof of absence. Lists default to 10 (CLI bounds 1–200) with explicit `--cursor`; inspect one returned ID with `milestones get --milestone-id ID`. Milestone timing and details do not replace market resolution rules.
+   - Use `milestones --category Sports --type football_game --minimum-start-date RFC3339` for upcoming milestone IDs and related event tickers, optionally scoped by `--competition`, `--source-id`, or `--related-event-ticker`. The scheduled-start bound is passed unchanged for provider validation; `--min-updated-ts` filters metadata updates independently. Names come from provider data; an empty result is not proof of absence. Lists default to 10 (CLI bounds 1–200) with explicit `--cursor`; inspect one returned ID with `milestones get --milestone-id ID`. Milestone timing and details do not replace market resolution rules.
    - Use `markets get` for current market fields and rules.
    - Use `markets orderbook` for current YES and NO bid depth.
    - Use `markets trades` for prints and candlestick commands for time-series history.

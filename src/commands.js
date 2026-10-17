@@ -147,6 +147,7 @@ export const COMMANDS = [
   command(["milestones"], "Discover public milestones and their related events.", "/milestones", "milestones", [
     pageLimitOption("milestones", {min: 1, max: 200}),
     cursorOption,
+    stringOption("minimum-start-date", "minimum_start_date", "Filter by minimum scheduled start time (RFC3339, validated by Kalshi)."),
     stringOption("category", "category", "Filter by milestone category."),
     stringOption("competition", "competition", "Filter by competition, using the provider's exact name."),
     stringOption("type", "type", "Filter by milestone type (for example football_game)."),
