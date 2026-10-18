@@ -16,6 +16,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi series get` | `/series/{series_ticker}` | `--series-ticker` | `series` |
 | `kalshi events` | `/events` | none | `events[]` |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
+| `kalshi events metadata` | `/events/{event_ticker}/metadata` | `--event-ticker` | top-level metadata fields |
 | `kalshi events candlesticks` | `/series/{series_ticker}/events/{ticker}/candlesticks` | series ticker, event ticker, start, end, interval | `market_tickers[]` plus parallel candle arrays |
 | `kalshi markets` | `/markets` | none | `markets[]` |
 | `kalshi markets get` | `/markets/{ticker}` | `--ticker` | `market` |
@@ -98,6 +99,10 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 ## Milestone discovery
 
 `milestones` accepts `--limit` (default 10, CLI bounds 1–200), `--cursor`, `--minimum-start-date` (RFC3339 scheduled-start bound, passed unchanged for provider validation), `--category`, `--competition`, `--type`, `--source-id`, `--related-event-ticker`, and `--min-updated-ts` (non-negative Unix seconds, filtering metadata update time independently of scheduled start). Flags map directly to the corresponding snake_case query names. `milestones get` requires a discovered `--milestone-id` (1–200 letters, numbers, periods, underscores, or hyphens, starting with a letter or number) and sends no query. Both make exactly one public unauthenticated GET and preserve timing, related/primary event tickers, nested details, source IDs, nulls, and unknown fields inside `data`. Lists never follow cursors automatically.
+
+## Event metadata
+
+`events metadata` requires a discovered `--event-ticker` using the same safe ticker validation as `events get`. It sends no query parameters and makes exactly one public, credential-free GET. The required string `image_url` identifies the response shape; the complete response, including `featured_image_url`, `market_details`, `settlement_sources`, competition/scope, empty arrays, nulls, and unknown fields, stays unchanged inside `data`. Successful lookup reports `count: 1`, including an empty image string or metadata arrays. It does not fetch returned URLs or follow related markets. Inspect market rules separately.
 
 ## Exchange availability
 

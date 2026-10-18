@@ -193,6 +193,9 @@ export const COMMANDS = [
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "event_ticker"}),
     booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside the event.")
   ], undefined, "object"),
+  command(["events", "metadata"], "Inspect event settlement sources, competition, and market metadata.", "/events/{event_ticker}/metadata", "image_url", [
+    tickerOption("event-ticker", "event_ticker", "Event ticker returned by discovery.", {required: true, location: "path", pathName: "event_ticker"})
+  ], undefined, "string"),
   command(["events", "candlesticks"], "Get candles for every market in an event.", "/series/{series_ticker}/events/{ticker}/candlesticks", "market_tickers", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "ticker"}),
