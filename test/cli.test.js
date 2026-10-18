@@ -75,6 +75,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
     [["events"], "/events", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
+    [["events", "metadata", "--event-ticker", "EVENT"], "/events/EVENT/metadata", "string"],
     [["events", "candlesticks", "--series-ticker", "SERIES", "--event-ticker", "EVENT", "--start-ts", "1", "--end-ts", "2", "--period-interval", "60"], "/series/SERIES/events/EVENT/candlesticks", "array"],
     [["markets"], "/markets", "array"],
     [["markets", "get", "--ticker", "MARKET"], "/markets/MARKET", "object"],
@@ -596,4 +597,64 @@ test("timeouts also interrupt a stalled response body", async () => {
   });
   assert.equal(result.exitCode, 1);
   assert.equal(yamlErrorCode(result.stderr), "network_timeout");
+});
+
+test("event metadata makes one credential-free GET and preserves the complete provider response", async () => {
+  const body = {
+    image_url: "https://example.com/event.png",
+    featured_image_url: null,
+    market_details: [{market_ticker: "EVENT-A", image_url: "", color_code: "#123456"}],
+    settlement_sources: [{name: "Official source", url: "https://example.com/results"}],
+    competition: "College Football",
+    competition_scope: "Game",
+    future_field: {amount_fp: "1.2300", available: false}
+  };
+  let calls = 0;
+  const parsed = parseArguments(["events", "metadata", "--event-ticker", "EVENT"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  const result = await executeRequest(parsed.definition, request, {
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/events/EVENT/metadata`);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.query, {});
+  assert.deepEqual(result.data, body);
+  const rendered = renderYamlDocument(result);
+  assert.match(rendered, /featured_image_url: null/);
+  assert.match(rendered, /amount_fp: "1.2300"/);
+});
+
+test("event metadata requires a safe event ticker before any request and documents the lookup", async () => {
+  for (const flags of [[], ["--event-ticker", " "], ["--event-ticker", "../account"], ["--event-ticker", "EVENT", "--url", "https://example.com"]]) {
+    let calls = 0;
+    const result = await invoke(["events", "metadata", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+  const help = await invoke(["events", "metadata", "--help"]);
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /--event-ticker/);
+  assert.match(help.stdout, /settlement sources/i);
+});
+
+test("event metadata accepts empty image strings and rejects a missing or invalid primary field atomically", async () => {
+  const valid = await invoke(["events", "metadata", "--event-ticker", "EVENT"], {
+    fetchImpl: async () => jsonResponse({image_url: "", market_details: [], settlement_sources: []})
+  });
+  assert.equal(valid.exitCode, 0);
+  assert.equal(yamlScalar(valid.stdout, "count"), 1);
+  for (const body of [{}, {image_url: null}, {image_url: []}]) {
+    const result = await invoke(["events", "metadata", "--event-ticker", "EVENT"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
 });
