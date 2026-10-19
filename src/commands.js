@@ -174,6 +174,14 @@ export const COMMANDS = [
   }),
   command(["series", "tags"], "List official series tags grouped by category.", "/search/tags_by_categories", "tags_by_categories", [], undefined, "object"),
   command(["series", "sports"], "Discover official sport scopes, competitions, and sport ordering.", "/search/filters_by_sport", "filters_by_sports", [], undefined, "object"),
+  command(["series", "fee-changes"], "Inspect scheduled fee changes for one public series.", "/series/fee_changes", "series_fee_change_arr", [
+    tickerOption("series-ticker", "series_ticker", "Series ticker (required to bound this unpaginated endpoint).", {required: true}),
+    booleanOption("show-historical", "show_historical", "Include historical changes explicitly with true or false.")
+  ], undefined, "array", {
+    maxResponseBytes: SERIES_MAX_RESPONSE_BYTES,
+    responseTooLargeHint: "Omit --show-historical true to narrow this unpaginated fee-change response.",
+    helpNotes: ["Requires --series-ticker; this endpoint has no pagination. Responses over 64 KiB are rejected."]
+  }),
   command(["series", "get"], "Get one public market series.", "/series/{series_ticker}", "series", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")
@@ -196,6 +204,11 @@ export const COMMANDS = [
   command(["events", "metadata"], "Inspect event settlement sources, competition, and market metadata.", "/events/{event_ticker}/metadata", "image_url", [
     tickerOption("event-ticker", "event_ticker", "Event ticker returned by discovery.", {required: true, location: "path", pathName: "event_ticker"})
   ], undefined, "string"),
+  command(["events", "fee-changes"], "Inspect public event fee overrides and scheduled resets.", "/events/fee_changes", "event_fee_changes", [
+    tickerOption("event-ticker", "event_ticker", "Filter by one event ticker."),
+    pageLimitOption("fee changes", {min: 1, max: 1000}),
+    cursorOption
+  ]),
   command(["events", "candlesticks"], "Get candles for every market in an event.", "/series/{series_ticker}/events/{ticker}/candlesticks", "market_tickers", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "ticker"}),

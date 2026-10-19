@@ -67,6 +67,10 @@ Use `kalshi milestones --category Sports --type football_game --minimum-start-da
 
 Use `kalshi events metadata --event-ticker EVENT_FROM_DISCOVERY` to inspect an event's settlement sources, competition and scope, image URLs, and per-market metadata. This makes one public GET to `/events/{event_ticker}/metadata` with no query parameters and returns `count: 1`, even when the provider's metadata arrays are empty. All provider fields remain unchanged inside `data`; source URLs and image URLs are returned as data and are never fetched automatically. Verify market resolution rules separately with `markets get`.
 
+Use `kalshi series fee-changes --series-ticker SERIES_FROM_DISCOVERY` to inspect scheduled fee types, multipliers, and effective timestamps. `--show-historical true` includes past changes; explicit `false` is passed unchanged. The CLI requires a series ticker to scope this unpaginated public GET `/series/fee_changes` and caps its response at 64 KiB. `count` describes `data.series_fee_change_arr`; all provider fields remain unchanged. This command reports fee evidence without calculating trading costs.
+
+Use `kalshi events fee-changes --event-ticker EVENT_FROM_DISCOVERY --limit 10` for public event fee overrides and scheduled resets. This makes one GET `/events/fee_changes`; the event ticker is optional, the default limit is 10 (1–1000), and continuation requires an explicit `--cursor`. `count` describes `data.event_fee_changes`. Null override fields indicate a cleared override falling back to the parent series; nulls and every other provider value are preserved without calculating costs or fetching series data.
+
 ## Output contract
 
 Success writes exactly one YAML document to stdout:

@@ -13,10 +13,12 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
 | `kalshi series tags` | `/search/tags_by_categories` | none | `tags_by_categories` |
 | `kalshi series sports` | `/search/filters_by_sport` | none | `filters_by_sports` plus `sport_ordering` |
+| `kalshi series fee-changes` | `/series/fee_changes` | `--series-ticker` (CLI scope requirement) | `series_fee_change_arr[]`; optional explicit boolean `--show-historical`, unpaginated, 64 KiB response cap |
 | `kalshi series get` | `/series/{series_ticker}` | `--series-ticker` | `series` |
 | `kalshi events` | `/events` | none | `events[]` |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
 | `kalshi events metadata` | `/events/{event_ticker}/metadata` | `--event-ticker` | top-level metadata fields |
+| `kalshi events fee-changes` | `/events/fee_changes` | none | `event_fee_changes[]`; optional `--event-ticker`, limit 10 (1–1000), explicit `--cursor`; null override resets preserved |
 | `kalshi events candlesticks` | `/series/{series_ticker}/events/{ticker}/candlesticks` | series ticker, event ticker, start, end, interval | `market_tickers[]` plus parallel candle arrays |
 | `kalshi markets` | `/markets` | none | `markets[]` |
 | `kalshi markets get` | `/markets/{ticker}` | `--ticker` | `market` |

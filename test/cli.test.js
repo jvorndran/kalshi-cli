@@ -72,10 +72,12 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "sports"], "/search/filters_by_sport", "object"],
+    [["series", "fee-changes", "--series-ticker", "SERIES"], "/series/fee_changes", "array"],
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
     [["events"], "/events", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
     [["events", "metadata", "--event-ticker", "EVENT"], "/events/EVENT/metadata", "string"],
+    [["events", "fee-changes"], "/events/fee_changes", "array"],
     [["events", "candlesticks", "--series-ticker", "SERIES", "--event-ticker", "EVENT", "--start-ts", "1", "--end-ts", "2", "--period-interval", "60"], "/series/SERIES/events/EVENT/candlesticks", "array"],
     [["markets"], "/markets", "array"],
     [["markets", "get", "--ticker", "MARKET"], "/markets/MARKET", "object"],
@@ -98,6 +100,100 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
   }
+});
+
+test("series fee changes preserve scheduled and historical fee evidence with one public GET", async () => {
+  const argv = ["series", "fee-changes", "--series-ticker", "SERIES", "--show-historical", "false"];
+  const parsed = parseArguments(argv);
+  const body = {series_fee_change_arr: [{id: "change-1", series_ticker: "SERIES", fee_type: "quadratic", fee_multiplier: 0.5, scheduled_ts: "2026-10-20T00:00:00Z", unknown: null}], extra: "0.0100"};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, buildRequest(parsed.definition, parsed.values), {
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/series/fee_changes?series_ticker=SERIES&show_historical=false`);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.equal(init.headers.authorization, undefined);
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(result.data, body);
+  assert.equal(result.count, 1);
+  const historical = parseArguments(["series", "fee-changes", "--series-ticker", "SERIES", "--show-historical", "true"]);
+  assert.equal(buildRequest(historical.definition, historical.values).query.show_historical, true);
+  const empty = await invoke(["series", "fee-changes", "--series-ticker", "SERIES"], {fetchImpl: async () => jsonResponse({series_fee_change_arr: []})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("series fee discovery requires a safe bounded scope and validates its response atomically", async () => {
+  let calls = 0;
+  for (const flags of [[], ["--series-ticker", "../orders"], ["--series-ticker", "SERIES", "--show-historical", "yes"], ["--series-ticker", "SERIES", "--limit", "10"]]) {
+    const result = await invoke(["series", "fee-changes", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  assert.equal(calls, 0);
+  const help = await invoke(["series", "fee-changes", "--help"]);
+  assert.match(help.stdout, /--show-historical/);
+  for (const body of [{}, {series_fee_change_arr: null}, {series_fee_change_arr: {}}]) {
+    const result = await invoke(["series", "fee-changes", "--series-ticker", "SERIES"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  const oversized = await invoke(["series", "fee-changes", "--series-ticker", "SERIES"], {
+    fetchImpl: async () => jsonResponse({series_fee_change_arr: [], padding: "x".repeat(SERIES_MAX_RESPONSE_BYTES)})
+  });
+  assert.equal(oversized.exitCode, 1);
+  assert.equal(oversized.stdout, "");
+  assert.equal(yamlErrorCode(oversized.stderr), "response_too_large");
+});
+
+test("event fee changes preserve override resets and caller-controlled pagination", async () => {
+  const argv = ["events", "fee-changes", "--event-ticker", "EVENT", "--limit", "2", "--cursor", "page+2/="];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.equal(request.endpoint, "/events/fee_changes");
+  assert.deepEqual(request.query, {event_ticker: "EVENT", limit: 2, cursor: "page+2/="});
+  const body = {event_fee_changes: [{id: "change", event_ticker: "EVENT", series_ticker: "SERIES", fee_type_override: null, fee_multiplier_override: null, scheduled_ts: "2026-10-20T00:00:00Z", unknown: "0.0100"}], cursor: "next", extra: false};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).searchParams.get("cursor"), "page+2/=");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.headers.authorization, undefined);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.deepEqual(result.data, body);
+  assert.equal(result.count, 1);
+  const defaults = parseArguments(["events", "fee-changes"]);
+  assert.deepEqual(buildRequest(defaults.definition, defaults.values).query, {limit: 10});
+  const empty = await invoke(["events", "fee-changes"], {fetchImpl: async () => jsonResponse({event_fee_changes: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("event fee changes reject invalid options before requests and invalid shapes atomically", async () => {
+  let calls = 0;
+  for (const flags of [["--limit", "0"], ["--limit", "1001"], ["--event-ticker", "../orders"], ["--all"], ["--show-historical", "true"]]) {
+    const result = await invoke(["events", "fee-changes", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  assert.equal(calls, 0);
+  for (const body of [{}, {event_fee_changes: null}, {event_fee_changes: {}}]) {
+    const result = await invoke(["events", "fee-changes"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  const help = await invoke(["events", "fee-changes", "--help"]);
+  assert.match(help.stdout, /--event-ticker/);
+  assert.match(help.stdout, /--cursor/);
 });
 
 test("milestone discovery maps filters, preserves the response, and leaves pagination caller-controlled", async () => {
