@@ -18,6 +18,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi events` | `/events` | none | `events[]` |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
 | `kalshi events metadata` | `/events/{event_ticker}/metadata` | `--event-ticker` | top-level metadata fields |
+| `kalshi events fee-changes` | `/events/fee_changes` | none | `event_fee_changes[]`; optional `--event-ticker`, limit 10 (1–1000), explicit `--cursor`; null override resets preserved |
 | `kalshi events candlesticks` | `/series/{series_ticker}/events/{ticker}/candlesticks` | series ticker, event ticker, start, end, interval | `market_tickers[]` plus parallel candle arrays |
 | `kalshi markets` | `/markets` | none | `markets[]` |
 | `kalshi markets get` | `/markets/{ticker}` | `--ticker` | `market` |
