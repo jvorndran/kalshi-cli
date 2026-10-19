@@ -174,6 +174,14 @@ export const COMMANDS = [
   }),
   command(["series", "tags"], "List official series tags grouped by category.", "/search/tags_by_categories", "tags_by_categories", [], undefined, "object"),
   command(["series", "sports"], "Discover official sport scopes, competitions, and sport ordering.", "/search/filters_by_sport", "filters_by_sports", [], undefined, "object"),
+  command(["series", "fee-changes"], "Inspect scheduled fee changes for one public series.", "/series/fee_changes", "series_fee_change_arr", [
+    tickerOption("series-ticker", "series_ticker", "Series ticker (required to bound this unpaginated endpoint).", {required: true}),
+    booleanOption("show-historical", "show_historical", "Include historical changes explicitly with true or false.")
+  ], undefined, "array", {
+    maxResponseBytes: SERIES_MAX_RESPONSE_BYTES,
+    responseTooLargeHint: "Omit --show-historical true to narrow this unpaginated fee-change response.",
+    helpNotes: ["Requires --series-ticker; this endpoint has no pagination. Responses over 64 KiB are rejected."]
+  }),
   command(["series", "get"], "Get one public market series.", "/series/{series_ticker}", "series", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")

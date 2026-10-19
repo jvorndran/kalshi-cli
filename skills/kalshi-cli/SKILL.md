@@ -16,6 +16,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
 
 2. Discover the contract instead of constructing a ticker.
    - Run `kalshi series sports` for the official sport scopes, competitions, and `sport_ordering`. It accepts no flags and makes one public GET; use the metadata to guide discovery, then verify actual event and market identity.
+   - Use `kalshi series fee-changes --series-ticker SERIES` for scheduled fee types, multipliers and effective times; add `--show-historical true` for past changes. This unpaginated public GET requires one safe series ticker and caps raw responses at 64 KiB. Preserve `series_fee_change_arr` as evidence; do not infer trading costs.
    - Run `kalshi series tags` to inspect the compact official category/tag index, then use `--category`, `--tags`, or `--min-updated-ts`; the CLI rejects an unfiltered full-catalog request because Kalshi does not paginate that route.
    - If a filtered series response exceeds its 64 KiB safety cap, refine the filter. Never work around the guard by fetching and truncating Kalshi data elsewhere.
    - Narrow through `events` and `markets`. Their default page size is 10; request a larger `--limit` only when the additional records are needed, and split requests if the formatted YAML output cap is reached.
