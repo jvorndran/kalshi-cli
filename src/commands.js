@@ -121,6 +121,12 @@ function validateHistoricalMarketFilters(values) {
   if (primary.length > 1) return "Historical markets accept only one of --tickers, --event-ticker, --series-ticker, or --mve-filter.";
 }
 
+function validateMultivariateEventFilters(values) {
+  if (values.series_ticker !== undefined && values.collection_ticker !== undefined) {
+    return "Cannot combine --series-ticker and --collection-ticker.";
+  }
+}
+
 function validateSeriesFilters(values) {
   const scoped = ["category", "tags", "min_updated_ts"]
     .some((key) => values[key] !== undefined);
@@ -207,6 +213,16 @@ export const COMMANDS = [
     integerOption("min-close-ts", "min_close_ts", "Filter events with a market closing after this Unix timestamp.", {min: 0}),
     integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0})
   ]),
+  command(["events", "multivariate"], "Discover existing public multivariate events.", "/events/multivariate", "events", [
+    pageLimitOption("events", {min: 1, max: 200}),
+    cursorOption,
+    tickerOption("series-ticker", "series_ticker", "Filter by series ticker."),
+    tickerOption("collection-ticker", "collection_ticker", "Filter by collection ticker."),
+    stringOption("tickers", "tickers", "Comma-separated event tickers (maximum 100).", {csv: true, maxItems: 100, csvTickers: true}),
+    booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside each event.")
+  ], validateMultivariateEventFilters, "array", {
+    helpNotes: ["Cannot combine --series-ticker and --collection-ticker. This command only reads existing events."]
+  }),
   command(["events", "get"], "Get one public event.", "/events/{event_ticker}", "event", [
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "event_ticker"}),
     booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside the event.")

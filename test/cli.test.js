@@ -77,6 +77,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["collections"], "/multivariate_event_collections", "array"],
     [["collections", "get", "--collection-ticker", "COLLECTION"], "/multivariate_event_collections/COLLECTION", "object"],
     [["events"], "/events", "array"],
+    [["events", "multivariate"], "/events/multivariate", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
     [["events", "metadata", "--event-ticker", "EVENT"], "/events/EVENT/metadata", "string"],
     [["events", "fee-changes"], "/events/fee_changes", "array"],
@@ -161,6 +162,51 @@ test("collection validation rejects unsafe scopes and malformed responses withou
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /upstream_shape_error/);
   }
+});
+
+test("multivariate events expose an existing collection's public events with explicit paging", async () => {
+  const parsed = parseArguments(["events", "multivariate", "--limit", "2", "--cursor", "page+2/=", "--collection-ticker", "COLLECTION", "--tickers", "EVENT,EVENT2", "--with-nested-markets", "false"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {limit: 2, cursor: "page+2/=", collection_ticker: "COLLECTION", tickers: "EVENT,EVENT2", with_nested_markets: false});
+  const body = {events: [{event_ticker: "EVENT", collateral_return_type: "", mutually_exclusive: false, markets: [{ticker: "MARKET", yes_bid_dollars: "0.123400", unknown: null}]}], cursor: "next"};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(url, `${BASE_URL}/events/multivariate?limit=2&cursor=page%2B2%2F%3D&collection_ticker=COLLECTION&tickers=EVENT%2CEVENT2&with_nested_markets=false`);
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.headers.authorization, undefined);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  const scoped = parseArguments(["events", "multivariate", "--series-ticker", "SERIES", "--with-nested-markets", "true"]);
+  assert.deepEqual(buildRequest(scoped.definition, scoped.values).query, {limit: 10, series_ticker: "SERIES", with_nested_markets: true});
+  const empty = await invoke(["events", "multivariate"], {fetchImpl: async () => jsonResponse({events: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("multivariate discovery rejects incompatible and unsafe filters before a request", async () => {
+  for (const flags of [
+    ["--series-ticker", "SERIES", "--collection-ticker", "COLLECTION"],
+    ["--limit", "0"], ["--limit", "201"], ["--collection-ticker", "../bad"],
+    ["--with-nested-markets", "maybe"], ["--tickers", "EVENT,,OTHER"],
+    ["--tickers", Array.from({length: 101}, (_, i) => `EVENT${i}`).join(",")]
+  ]) {
+    let calls = 0;
+    const result = await invoke(["events", "multivariate", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+  const bad = await invoke(["events", "multivariate"], {fetchImpl: async () => jsonResponse({events: null})});
+  assert.equal(bad.exitCode, 1);
+  assert.equal(bad.stdout, "");
+  assert.match(bad.stderr, /upstream_shape_error/);
+  const help = await invoke(["events", "multivariate", "--help"]);
+  assert.match(help.stdout, /Cannot combine/);
 });
 
 test("series fee changes preserve scheduled and historical fee evidence with one public GET", async () => {
