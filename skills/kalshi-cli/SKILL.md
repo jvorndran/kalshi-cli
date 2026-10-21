@@ -34,6 +34,8 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
    - Read [references/command-contract.md](references/command-contract.md) for the full command surface and live-versus-historical workflow.
 
 4. Preserve provenance and provider precision.
+   - Use `events multivariate --collection-ticker COLLECTION` to read existing combination events. Alternatively scope by `--series-ticker`; the two cannot be combined. Optional `--tickers` accepts at most 100, and `--with-nested-markets true` includes markets. Default page10 (1–200), explicit cursor, one public GET, no creation or implicit follow-up.
+   - Discover multivariate collections with `collections --status open`, optionally scoped by `--associated-event-ticker` or `--series-ticker`. Use `collections get --collection-ticker COLLECTION` to inspect associated events, size/ordering constraints, and price ranges. Lists default to 10 (1–200) and continue only with an explicit cursor; both commands are public GETs that preserve provider values and never create a combination.
    - Parse stdout and stderr as one newline-terminated YAML document. Retain `command`, `endpoint`, `query`, `source_url`, `requested_at`, `observed_at`, `response_sha256`, `count`, and unchanged `data`.
    - Successful formatted YAML responses are capped at 64 KiB. A structured `output_too_large` error means the caller should narrow the filter, lower `--limit`, or shorten a candle range.
    - Preserve fixed-point price, volume, and open-interest strings exactly. Convert them only in a separate, stated calculation.

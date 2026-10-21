@@ -54,8 +54,9 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
 | Milestones | `milestones`, `milestones get` | Discover scheduled milestones and inspect their related event tickers and provider details. |
+| Collections | `collections`, `collections get` | Discover multivariate event collections and inspect their associated events and combination rules. |
 | Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
-| Events | `events`, `events get`, `events metadata`, `events candlesticks` | Discover events, inspect settlement sources and metadata, or retrieve candles for an event's markets. |
+| Events | `events`, `events multivariate`, `events get`, `events metadata`, `events candlesticks` | Discover standard or multivariate events, inspect settlement sources and metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
 | Historical | `historical cutoff`, `historical markets`, `historical markets get`, `historical markets candlesticks`, `historical trades` | Find the live/archive boundary and retrieve archived public data. |
 
@@ -71,7 +72,11 @@ Use `kalshi series fee-changes --series-ticker SERIES_FROM_DISCOVERY` to inspect
 
 Use `kalshi events fee-changes --event-ticker EVENT_FROM_DISCOVERY --limit 10` for public event fee overrides and scheduled resets. This makes one GET `/events/fee_changes`; the event ticker is optional, the default limit is 10 (1–1000), and continuation requires an explicit `--cursor`. `count` describes `data.event_fee_changes`. Null override fields indicate a cleared override falling back to the parent series; nulls and every other provider value are preserved without calculating costs or fetching series data.
 
+Use `kalshi collections --status open --associated-event-ticker EVENT_FROM_DISCOVERY` to discover multivariate event collections, then `kalshi collections get --collection-ticker COLLECTION_FROM_DISCOVERY` to inspect one collection's associated events, size limits, ordering rules, and price ranges. Optional list filters include `--series-ticker`; lists default to 10 (1–200) with explicit `--cursor` continuation. Each command makes one public GET and preserves every provider field inside `data`, including null limits and fixed-point price strings. These commands inspect existing collections only.
+
 ## Output contract
+
+Use `kalshi events multivariate --collection-ticker COLLECTION_FROM_DISCOVERY` to retrieve existing multivariate events for a collection, or use `--series-ticker` instead; the two scopes cannot be combined. Optional `--tickers` accepts up to 100 comma-separated event tickers and explicit `--with-nested-markets true` includes provider markets. Default limit 10 (1–200), explicit cursor continuation, and one public GET `/events/multivariate` per invocation. Provider event/market values, nulls, and fixed-point strings remain unchanged. No combination is created and no market rules are inferred from collection metadata.
 
 Success writes exactly one YAML document to stdout:
 

@@ -121,6 +121,12 @@ function validateHistoricalMarketFilters(values) {
   if (primary.length > 1) return "Historical markets accept only one of --tickers, --event-ticker, --series-ticker, or --mve-filter.";
 }
 
+function validateMultivariateEventFilters(values) {
+  if (values.series_ticker !== undefined && values.collection_ticker !== undefined) {
+    return "Cannot combine --series-ticker and --collection-ticker.";
+  }
+}
+
 function validateSeriesFilters(values) {
   const scoped = ["category", "tags", "min_updated_ts"]
     .some((key) => values[key] !== undefined);
@@ -186,6 +192,16 @@ export const COMMANDS = [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")
   ], undefined, "object"),
+  command(["collections"], "Discover public multivariate event collections.", "/multivariate_event_collections", "multivariate_contracts", [
+    pageLimitOption("collections", {min: 1, max: 200}),
+    cursorOption,
+    stringOption("status", "status", "Collection status.", {enum: ["unopened", "open", "closed"]}),
+    tickerOption("associated-event-ticker", "associated_event_ticker", "Filter by an associated event ticker."),
+    tickerOption("series-ticker", "series_ticker", "Filter by series ticker.")
+  ]),
+  command(["collections", "get"], "Inspect one public multivariate event collection.", "/multivariate_event_collections/{collection_ticker}", "multivariate_contract", [
+    tickerOption("collection-ticker", "collection_ticker", "Collection ticker returned by discovery.", {required: true, location: "path", pathName: "collection_ticker"})
+  ], undefined, "object"),
   command(["events"], "List public events.", "/events", "events", [
     pageLimitOption("events", {min: 1, max: 200}),
     cursorOption,
@@ -197,6 +213,16 @@ export const COMMANDS = [
     integerOption("min-close-ts", "min_close_ts", "Filter events with a market closing after this Unix timestamp.", {min: 0}),
     integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0})
   ]),
+  command(["events", "multivariate"], "Discover existing public multivariate events.", "/events/multivariate", "events", [
+    pageLimitOption("events", {min: 1, max: 200}),
+    cursorOption,
+    tickerOption("series-ticker", "series_ticker", "Filter by series ticker."),
+    tickerOption("collection-ticker", "collection_ticker", "Filter by collection ticker."),
+    stringOption("tickers", "tickers", "Comma-separated event tickers (maximum 100).", {csv: true, maxItems: 100, csvTickers: true}),
+    booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside each event.")
+  ], validateMultivariateEventFilters, "array", {
+    helpNotes: ["Cannot combine --series-ticker and --collection-ticker. This command only reads existing events."]
+  }),
   command(["events", "get"], "Get one public event.", "/events/{event_ticker}", "event", [
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "event_ticker"}),
     booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside the event.")
