@@ -16,6 +16,8 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi series fee-changes` | `/series/fee_changes` | `--series-ticker` (CLI scope requirement) | `series_fee_change_arr[]`; optional explicit boolean `--show-historical`, unpaginated, 64 KiB response cap |
 | `kalshi series get` | `/series/{series_ticker}` | `--series-ticker` | `series` |
 | `kalshi events` | `/events` | none | `events[]` |
+| `kalshi collections` | `/multivariate_event_collections` | none | `multivariate_contracts[]`; optional `--status` (unopened/open/closed), `--associated-event-ticker`, `--series-ticker`, limit 10 (1–200), explicit cursor |
+| `kalshi collections get` | `/multivariate_event_collections/{collection_ticker}` | `--collection-ticker` | `multivariate_contract`; unchanged associated-event constraints, nulls, ordering, price ranges |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
 | `kalshi events metadata` | `/events/{event_ticker}/metadata` | `--event-ticker` | top-level metadata fields |
 | `kalshi events fee-changes` | `/events/fee_changes` | none | `event_fee_changes[]`; optional `--event-ticker`, limit 10 (1–1000), explicit `--cursor`; null override resets preserved |

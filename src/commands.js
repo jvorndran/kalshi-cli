@@ -186,6 +186,16 @@ export const COMMANDS = [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),
     booleanOption("include-volume", "include_volume", "Include aggregate volume.")
   ], undefined, "object"),
+  command(["collections"], "Discover public multivariate event collections.", "/multivariate_event_collections", "multivariate_contracts", [
+    pageLimitOption("collections", {min: 1, max: 200}),
+    cursorOption,
+    stringOption("status", "status", "Collection status.", {enum: ["unopened", "open", "closed"]}),
+    tickerOption("associated-event-ticker", "associated_event_ticker", "Filter by an associated event ticker."),
+    tickerOption("series-ticker", "series_ticker", "Filter by series ticker.")
+  ]),
+  command(["collections", "get"], "Inspect one public multivariate event collection.", "/multivariate_event_collections/{collection_ticker}", "multivariate_contract", [
+    tickerOption("collection-ticker", "collection_ticker", "Collection ticker returned by discovery.", {required: true, location: "path", pathName: "collection_ticker"})
+  ], undefined, "object"),
   command(["events"], "List public events.", "/events", "events", [
     pageLimitOption("events", {min: 1, max: 200}),
     cursorOption,

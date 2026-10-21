@@ -54,6 +54,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
 | Milestones | `milestones`, `milestones get` | Discover scheduled milestones and inspect their related event tickers and provider details. |
+| Collections | `collections`, `collections get` | Discover multivariate event collections and inspect their associated events and combination rules. |
 | Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
 | Events | `events`, `events get`, `events metadata`, `events candlesticks` | Discover events, inspect settlement sources and metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
@@ -70,6 +71,10 @@ Use `kalshi events metadata --event-ticker EVENT_FROM_DISCOVERY` to inspect an e
 Use `kalshi series fee-changes --series-ticker SERIES_FROM_DISCOVERY` to inspect scheduled fee types, multipliers, and effective timestamps. `--show-historical true` includes past changes; explicit `false` is passed unchanged. The CLI requires a series ticker to scope this unpaginated public GET `/series/fee_changes` and caps its response at 64 KiB. `count` describes `data.series_fee_change_arr`; all provider fields remain unchanged. This command reports fee evidence without calculating trading costs.
 
 Use `kalshi events fee-changes --event-ticker EVENT_FROM_DISCOVERY --limit 10` for public event fee overrides and scheduled resets. This makes one GET `/events/fee_changes`; the event ticker is optional, the default limit is 10 (1–1000), and continuation requires an explicit `--cursor`. `count` describes `data.event_fee_changes`. Null override fields indicate a cleared override falling back to the parent series; nulls and every other provider value are preserved without calculating costs or fetching series data.
+
+## Output contract
+
+Use `kalshi collections --status open --associated-event-ticker EVENT_FROM_DISCOVERY` to discover multivariate event collections, then `kalshi collections get --collection-ticker COLLECTION_FROM_DISCOVERY` to inspect one collection's associated events, size limits, ordering rules, and price ranges. Optional list filters include `--series-ticker`; lists default to 10 (1–200) with explicit `--cursor` continuation. Each command makes one public GET and preserves every provider field inside `data`, including null limits and fixed-point price strings. These commands inspect existing collections only.
 
 ## Output contract
 

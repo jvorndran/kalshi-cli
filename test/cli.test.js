@@ -74,6 +74,8 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["series", "sports"], "/search/filters_by_sport", "object"],
     [["series", "fee-changes", "--series-ticker", "SERIES"], "/series/fee_changes", "array"],
     [["series", "get", "--series-ticker", "SERIES"], "/series/SERIES", "object"],
+    [["collections"], "/multivariate_event_collections", "array"],
+    [["collections", "get", "--collection-ticker", "COLLECTION"], "/multivariate_event_collections/COLLECTION", "object"],
     [["events"], "/events", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
     [["events", "metadata", "--event-ticker", "EVENT"], "/events/EVENT/metadata", "string"],
@@ -92,13 +94,72 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["historical", "trades"], "/historical/trades", "array"]
   ];
   assert.equal(COMMANDS.length, cases.length);
-  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "MILESTONE", "Sports"].includes(part)).join(" ")));
+  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "MILESTONE", "COLLECTION", "Sports"].includes(part)).join(" ")));
   for (const [argv, endpoint, resultType] of cases) {
     const parsed = parseArguments(argv);
     const request = buildRequest(parsed.definition, parsed.values);
     assert.equal(request.endpoint, endpoint, parsed.definition.name);
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
+  }
+});
+
+test("collections discovery forwards bounded filters and preserves provider collection rules", async () => {
+  const parsed = parseArguments(["collections", "--limit", "2", "--cursor", "page+2/=", "--status", "open", "--associated-event-ticker", "EVENT", "--series-ticker", "SERIES"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {limit: 2, cursor: "page+2/=", status: "open", associated_event_ticker: "EVENT", series_ticker: "SERIES"});
+  const body = {multivariate_contracts: [{collection_ticker: "COLLECTION", associated_events: [{ticker: "EVENT", is_yes_only: false, size_max: null}], size_min: 1, size_max: 4, is_ordered: false, price_ranges: [{start: "0.0000", end: "1.0000", step: "0.0100"}]}], cursor: "next", unknown: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(url, `${BASE_URL}/multivariate_event_collections?limit=2&cursor=page%2B2%2F%3D&status=open&associated_event_ticker=EVENT&series_ticker=SERIES`);
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.headers.authorization, undefined);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  const defaults = parseArguments(["collections"]);
+  assert.deepEqual(buildRequest(defaults.definition, defaults.values).query, {limit: 10});
+  const empty = await invoke(["collections"], {fetchImpl: async () => jsonResponse({multivariate_contracts: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("collection detail requires a safe identifier and performs exactly one public GET", async () => {
+  const body = {multivariate_contract: {collection_ticker: "COLLECTION", is_ordered: true, description: "Provider rules", unknown: null}};
+  let calls = 0;
+  const result = await invoke(["collections", "get", "--collection-ticker", "COLLECTION"], {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(url, `${BASE_URL}/multivariate_event_collections/COLLECTION`);
+    assert.equal(init.method, "GET");
+    assert.equal(init.headers.authorization, undefined);
+    return jsonResponse(body);
+  }});
+  assert.equal(result.exitCode, 0);
+  assert.equal(calls, 1);
+  assert.equal(yamlScalar(result.stdout, "count"), 1);
+  assert.match(result.stdout, /unknown: null/);
+});
+
+test("collection validation rejects unsafe scopes and malformed responses without partial stdout", async () => {
+  for (const flags of [["--limit", "0"], ["--limit", "201"], ["--status", "settled"], ["--associated-event-ticker", "../bad"], ["get"], ["get", "--collection-ticker", "https://example.com"]]) {
+    let calls = 0;
+    const result = await invoke(["collections", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+  for (const [args, body] of [
+    [["collections"], {multivariate_contracts: {}}],
+    [["collections", "get", "--collection-ticker", "COLLECTION"], {multivariate_contract: null}]
+  ]) {
+    const result = await invoke(args, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /upstream_shape_error/);
   }
 });
 
