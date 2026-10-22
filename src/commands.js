@@ -263,6 +263,13 @@ export const COMMANDS = [
     tickerOption("ticker", "ticker", "Market ticker.", {required: true, location: "path", pathName: "ticker"}),
     integerOption("depth", "depth", "Orderbook depth (0-100; 0 returns all levels).", {min: 0, max: 100})
   ], undefined, "object"),
+  command(["markets", "orderbooks"], "Get public bid-side orderbooks for up to 100 markets in one request.", "/markets/orderbooks", "orderbooks", [
+    stringOption("tickers", "tickers", "Comma-separated market tickers (1-100); sent as repeated query parameters.", {
+      required: true, csv: true, maxItems: 100, csvTickers: true, repeatedQuery: true
+    })
+  ], undefined, "array", {
+    helpNotes: ["One public GET, no automatic follow-up. Use markets orderbook for a single market with --depth."]
+  }),
   command(["markets", "trades"], "List current public trades.", "/markets/trades", "trades", tradeOptions(), validateTimeRange),
   command(["markets", "candlesticks"], "Get candles for one active or recent market.", "/series/{series_ticker}/markets/{ticker}/candlesticks", "candlesticks", [
     tickerOption("series-ticker", "series_ticker", "Series ticker.", {required: true, location: "path", pathName: "series_ticker"}),

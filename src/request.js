@@ -12,7 +12,7 @@ export function buildRequest(definition, values) {
     if (option.location === "path") {
       endpoint = endpoint.replace(`{${option.pathName}}`, encodeURIComponent(String(value)));
     } else {
-      query[option.query] = value;
+      query[option.query] = option.repeatedQuery ? value.split(",") : value;
     }
   }
 
@@ -24,6 +24,12 @@ export function buildRequest(definition, values) {
   }
 
   const url = new URL(`${BASE_URL}${endpoint}`);
-  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, item);
+    } else {
+      url.searchParams.set(key, String(value));
+    }
+  }
   return {endpoint, query, url: url.toString()};
 }
