@@ -26,6 +26,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi markets` | `/markets` | none | `markets[]` |
 | `kalshi markets get` | `/markets/{ticker}` | `--ticker` | `market` |
 | `kalshi markets orderbook` | `/markets/{ticker}/orderbook` | `--ticker` | `orderbook_fp` |
+| `kalshi markets orderbooks` | `/markets/orderbooks` | `--tickers` | `orderbooks[]`; 1-100 safe comma-separated tickers, encoded as repeated query parameters; `query.tickers` is an array; no depth or pagination |
 | `kalshi markets trades` | `/markets/trades` | none | `trades[]` |
 | `kalshi markets candlesticks` | `/series/{series_ticker}/markets/{ticker}/candlesticks` | series ticker, market ticker, start, end, interval | `candlesticks[]` |
 | `kalshi markets candlesticks batch` | `/markets/candlesticks` | market tickers, start, end, interval | `markets[]` |

@@ -29,6 +29,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
    - Use `events fee-changes --event-ticker EVENT` for public fee overrides and scheduled resets. The event scope is optional; one page defaults to 10 (1–1000) and continuation needs an explicit `--cursor`. Preserve null overrides: they clear the override and fall back to the parent series. Do not calculate trading costs or fetch parent data automatically.
    - Use `markets get` for current market fields and rules.
    - Use `markets orderbook` for current YES and NO bid depth.
+   - Use `markets orderbooks --tickers TICKER_A,TICKER_B` for up to 100 verified market books in one public GET. The API receives repeated ticker query parameters and `query.tickers` is an array; preserve `data.orderbooks` and its provider order/precision. No depth, cursor, retries, or implicit follow-up; use the single-book command for a depth limit.
    - Use `markets trades` for prints and candlestick commands for time-series history.
    - Check `historical cutoff` before assuming an older market remains on the live routes. Switch to the matching `historical` command when required.
    - Read [references/command-contract.md](references/command-contract.md) for the full command surface and live-versus-historical workflow.

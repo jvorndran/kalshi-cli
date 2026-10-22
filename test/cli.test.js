@@ -85,6 +85,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["markets"], "/markets", "array"],
     [["markets", "get", "--ticker", "MARKET"], "/markets/MARKET", "object"],
     [["markets", "orderbook", "--ticker", "MARKET"], "/markets/MARKET/orderbook", "object"],
+    [["markets", "orderbooks", "--tickers", "MARKET"], "/markets/orderbooks", "array"],
     [["markets", "trades"], "/markets/trades", "array"],
     [["markets", "candlesticks", "--series-ticker", "SERIES", "--ticker", "MARKET", "--start-ts", "1", "--end-ts", "2", "--period-interval", "60"], "/series/SERIES/markets/MARKET/candlesticks", "array"],
     [["markets", "candlesticks", "batch", "--market-tickers", "MARKET", "--start-ts", "1", "--end-ts", "2", "--period-interval", "5"], "/markets/candlesticks", "array"],
@@ -103,6 +104,89 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
   }
+});
+
+test("batch orderbooks use repeated ticker parameters and preserve complete provider books", async () => {
+  const parsed = parseArguments(["markets", "orderbooks", "--tickers", " MARKET-A, MARKET-B "]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {tickers: ["MARKET-A", "MARKET-B"]});
+  const body = {orderbooks: [
+    {ticker: "MARKET-B", orderbook_fp: {yes_dollars: [["0.4500", "12.3400"]], no_dollars: []}},
+    {ticker: "MARKET-A", orderbook_fp: {yes_dollars: [], no_dollars: [["0.5500", "0.0000"]]}}
+  ], future_field: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(url, `${BASE_URL}/markets/orderbooks?tickers=MARKET-A&tickers=MARKET-B`);
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+  const rendered = renderYamlDocument(result);
+  assert.match(rendered, /"12.3400"/);
+  assert.match(rendered, /future_field: null/);
+  const empty = await invoke(["markets", "orderbooks", "--tickers", "MARKET"], {
+    fetchImpl: async () => jsonResponse({orderbooks: []})
+  });
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+});
+
+test("batch orderbooks accept exactly 100 safe tickers and keep single-book requests unchanged", () => {
+  const tickers = Array.from({length: 100}, (_, i) => `MARKET-${i}`);
+  const parsed = parseArguments(["markets", "orderbooks", "--tickers", tickers.join(",")]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(new URL(request.url).searchParams.getAll("tickers"), tickers);
+  const single = parseArguments(["markets", "orderbook", "--ticker", "MARKET", "--depth", "10"]);
+  assert.equal(buildRequest(single.definition, single.values).url, `${BASE_URL}/markets/MARKET/orderbook?depth=10`);
+});
+
+test("batch orderbook arguments fail before any request", async () => {
+  for (const flags of [
+    [], ["--tickers", ""], ["--tickers", "A,,B"], ["--tickers", "../secret"],
+    ["--tickers", "https://example.com"], ["--tickers", "A".repeat(201)],
+    ["--tickers", Array(101).fill("MARKET").join(",")],
+    ["--tickers", "MARKET", "--depth", "1"],
+    ["--tickers", "MARKET", "--all"], ["--tickers", "MARKET", "--cursor", "next"]
+  ]) {
+    let calls = 0;
+    const result = await invoke(["markets", "orderbooks", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+});
+
+test("batch orderbooks reject malformed responses and preserve provider failures", async () => {
+  const argv = ["markets", "orderbooks", "--tickers", "MARKET"];
+  for (const body of [{}, {orderbooks: {}}, {orderbooks: null}]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(argv, {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({error: {message: "Slow down"}}, {status: 429});
+  }});
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.equal(yamlErrorCode(failed.stderr), "kalshi_http_error");
+  assert.equal(calls, 1);
+});
+
+test("batch orderbook help is offline and states its explicit bound", async () => {
+  let calls = 0;
+  const result = await invoke(["markets", "orderbooks", "--help"], {fetchImpl: async () => { calls += 1; }});
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /--tickers/);
+  assert.match(result.stdout, /100/);
+  assert.equal(calls, 0);
 });
 
 test("collections discovery forwards bounded filters and preserves provider collection rules", async () => {
