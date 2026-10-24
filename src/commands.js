@@ -164,6 +164,15 @@ export const COMMANDS = [
   command(["milestones", "get"], "Inspect one public milestone by its discovered ID.", "/milestones/{milestone_id}", "milestone", [
     tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"})
   ], undefined, "object"),
+  command(["milestones", "live"], "Inspect public live data for a discovered milestone.", "/live_data/milestone/{milestone_id}", "live_data", [
+    tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"}),
+    booleanOption("include-player-stats", "include_player_stats", "Include available player statistics explicitly with true or false.")
+  ], undefined, "object", {
+    helpNotes: [
+      "One public GET; player statistics are supported only for some sports and mapped milestones.",
+      "Live data may be cached or delayed. A missing live_data_delayed flag does not prove freshness."
+    ]
+  }),
   command(["series"], "List filtered public market series (requires a filter).", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),

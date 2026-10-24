@@ -10,6 +10,76 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("milestone live data makes one credential-free GET with an explicit player-stats boolean", async () => {
+  for (const value of [undefined, "true", "false"]) {
+    const flags = value === undefined ? [] : ["--include-player-stats", value];
+    const parsed = parseArguments(["milestones", "live", "--milestone-id", "abc-123", ...flags]);
+    const request = buildRequest(parsed.definition, parsed.values);
+    const body = {live_data: {
+      milestone_id: "abc-123", type: "football_game",
+      details: {status: "in_progress", live_data_delayed: true, score: 0,
+        player_stats: null, future_field: {amount_fp: "1.2300"}}
+    }, additional: null};
+    let calls = 0;
+    const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/live_data/milestone/abc-123${value === undefined ? "" : `?include_player_stats=${value}`}`);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }});
+    assert.equal(calls, 1);
+    assert.equal(result.count, 1);
+    assert.deepEqual(result.query, value === undefined ? {} : {include_player_stats: value === "true"});
+    assert.deepEqual(result.data, body);
+    assert.match(renderYamlDocument(result), /player_stats: null/);
+    assert.match(renderYamlDocument(result), /amount_fp: "1.2300"/);
+  }
+});
+
+test("milestone live rejects unsafe or unsupported arguments before a request", async () => {
+  for (const flags of [[], ["--milestone-id", "../portfolio"], ["--milestone-id", " "],
+    ["--milestone-id", "ID", "--include-player-stats", "maybe"],
+    ["--milestone-id", "ID", "--type", "football_game"],
+    ["--milestone-id", "ID", "--cursor", "next"],
+    ["--milestone-id", "ID", "--url", "https://example.com"]]) {
+    let calls = 0;
+    const result = await invoke(["milestones", "live", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+});
+
+test("milestone live preserves failures and rejects malformed responses atomically", async () => {
+  const argv = ["milestones", "live", "--milestone-id", "ID"];
+  for (const body of [{}, {live_data: null}, {live_data: []}, {live_data: "bad"}]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const result = await invoke(argv, {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({error: {message: "Live data not found"}}, {status: 404});
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(yamlErrorCode(result.stderr), "kalshi_http_error");
+  assert.match(result.stderr, /Live data not found/);
+});
+
+test("milestone live help describes delayed data without requesting it", async () => {
+  const result = await invoke(["milestones", "live", "--help"], {fetchImpl: async () => { assert.fail("help must be offline"); }});
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /--milestone-id/);
+  assert.match(result.stdout, /--include-player-stats/);
+  assert.match(result.stdout, /cached|delayed/i);
+});
+
 function captureStream() {
   const chunks = [];
   return {
@@ -69,6 +139,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["exchange", "schedule"], "/exchange/schedule", "object"],
     [["milestones"], "/milestones", "array"],
     [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
+    [["milestones", "live", "--milestone-id", "MILESTONE"], "/live_data/milestone/MILESTONE", "object"],
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "sports"], "/search/filters_by_sport", "object"],
