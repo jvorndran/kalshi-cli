@@ -11,6 +11,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi milestones` | `/milestones` | none | `milestones[]` |
 | `kalshi milestones get` | `/milestones/{milestone_id}` | `--milestone-id` | `milestone` |
 | `kalshi milestones live` | `/live_data/milestone/{milestone_id}` | `--milestone-id` | `live_data`; optional boolean `--include-player-stats`, one public GET, count one, unchanged status/delay/details; cached data may be stale even without a delay flag |
+| `kalshi milestones live batch` | `/live_data/batch` | `--milestone-ids` (1–100 safe comma-separated IDs) | `live_datas[]`; repeated query parameters, optional explicit `--include-player-stats`, no pagination or polling |
 | `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
 | `kalshi series tags` | `/search/tags_by_categories` | none | `tags_by_categories` |
 | `kalshi series sports` | `/search/filters_by_sport` | none | `filters_by_sports` plus `sport_ordering` |

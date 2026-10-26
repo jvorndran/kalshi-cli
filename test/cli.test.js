@@ -10,6 +10,76 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("batch milestone live data sends repeated IDs once and preserves all provider fields", async () => {
+  for (const value of [undefined, "true", "false"]) {
+    const flags = value === undefined ? [] : ["--include-player-stats", value];
+    const parsed = parseArguments(["milestones", "live", "batch", "--milestone-ids", " id-a, id-b ", ...flags]);
+    const request = buildRequest(parsed.definition, parsed.values);
+    const body = {live_datas: [
+      {milestone_id: "id-b", type: "football_game", details: {status: "in_progress", live_data_delayed: true, score: 0, amount_fp: "1.2300"}},
+      {milestone_id: "id-a", type: "football_game", details: {player_stats: null}}
+    ], future_field: null};
+    let calls = 0;
+    const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/batch");
+      assert.deepEqual(new URL(url).searchParams.getAll("milestone_ids"), ["id-a", "id-b"]);
+      assert.equal(new URL(url).searchParams.get("include_player_stats"), value ?? null);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }});
+    assert.equal(calls, 1);
+    assert.deepEqual(result.query, {milestone_ids: ["id-a", "id-b"], ...(value === undefined ? {} : {include_player_stats: value === "true"})});
+    assert.equal(result.count, 2);
+    assert.deepEqual(result.data, body);
+    assert.match(renderYamlDocument(result), /amount_fp: "1.2300"/);
+  }
+  const ids = Array.from({length: 100}, (_, i) => `id-${i}`);
+  const parsed = parseArguments(["milestones", "live", "batch", "--milestone-ids", ids.join(",")]);
+  assert.deepEqual(buildRequest(parsed.definition, parsed.values).query.milestone_ids, ids);
+});
+
+test("batch milestone live data rejects invalid inputs before fetching", async () => {
+  for (const flags of [[], ["--milestone-ids", " "], ["--milestone-ids", "A,,B"],
+    ["--milestone-ids", "../orders"], ["--milestone-ids", "https://example.com"],
+    ["--milestone-ids", "x".repeat(201)], ["--milestone-ids", Array(101).fill("id").join(",")],
+    ["--milestone-ids", "id", "--include-player-stats", "maybe"],
+    ["--milestone-ids", "id", "--cursor", "next"], ["--milestone-ids", "id", "--all"]]) {
+    let calls = 0;
+    const result = await invoke(["milestones", "live", "batch", ...flags], {fetchImpl: async () => { calls += 1; }});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(calls, 0);
+  }
+});
+
+test("batch milestone live data accepts empty data and preserves failures atomically", async () => {
+  const argv = ["milestones", "live", "batch", "--milestone-ids", "id"];
+  const empty = await invoke(argv, {fetchImpl: async () => jsonResponse({live_datas: []})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+  for (const body of [{}, {live_datas: null}, {live_datas: {}}]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(argv, {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({error: {message: "Slow down"}}, {status: 429});
+  }});
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.equal(yamlErrorCode(failed.stderr), "kalshi_http_error");
+  assert.equal(calls, 1);
+  const help = await invoke(["milestones", "live", "batch", "--help"]);
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /100/);
+});
+
 test("milestone live data makes one credential-free GET with an explicit player-stats boolean", async () => {
   for (const value of [undefined, "true", "false"]) {
     const flags = value === undefined ? [] : ["--include-player-stats", value];
@@ -140,6 +210,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["milestones"], "/milestones", "array"],
     [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
     [["milestones", "live", "--milestone-id", "MILESTONE"], "/live_data/milestone/MILESTONE", "object"],
+    [["milestones", "live", "batch", "--milestone-ids", "MILESTONE"], "/live_data/batch", "array"],
     [["series", "--category", "Sports"], "/series", "array"],
     [["series", "tags"], "/search/tags_by_categories", "object"],
     [["series", "sports"], "/search/filters_by_sport", "object"],
