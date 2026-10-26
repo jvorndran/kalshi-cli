@@ -173,6 +173,15 @@ export const COMMANDS = [
       "Live data may be cached or delayed. A missing live_data_delayed flag does not prove freshness."
     ]
   }),
+  command(["milestones", "live", "batch"], "Inspect public live data for up to 100 discovered milestones.", "/live_data/batch", "live_datas", [
+    stringOption("milestone-ids", "milestone_ids", "Comma-separated milestone IDs (1-100).", {required: true, csv: true, maxItems: 100, csvTickers: true, repeatedQuery: true}),
+    booleanOption("include-player-stats", "include_player_stats", "Include available player statistics explicitly with true or false.")
+  ], undefined, "array", {
+    helpNotes: [
+      "One public GET with repeated milestone_ids query parameters; no polling or follow-up calls.",
+      "Live data may be cached or delayed. A missing live_data_delayed flag does not prove freshness."
+    ]
+  }),
   command(["series"], "List filtered public market series (requires a filter).", "/series", "series", [
     stringOption("category", "category", "Filter by category."),
     stringOption("tags", "tags", "Filter by tag."),
