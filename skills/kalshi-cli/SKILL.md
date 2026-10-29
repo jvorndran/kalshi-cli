@@ -33,6 +33,7 @@ Use `kalshi` as a narrow evidence-retrieval tool. It exposes only a fixed set of
    - Use `markets orderbook` for current YES and NO bid depth.
    - Use `markets orderbooks --tickers TICKER_A,TICKER_B` for up to 100 verified market books in one public GET. The API receives repeated ticker query parameters and `query.tickers` is an array; preserve `data.orderbooks` and its provider order/precision. No depth, cursor, retries, or implicit follow-up; use the single-book command for a depth limit.
    - Use `markets trades` for prints and candlestick commands for time-series history.
+   - Use `incentives --status active --type liquidity` for public reward-program metadata. Optional status, type, and exact `--incentive-description` filters go to the provider. One page defaults to 10 (1–10000); continue with `data.next_cursor` as `--cursor`. Preserve reward units and all provider values in `data.incentive_programs`; no trading or follow-up is implicit.
    - Check `historical cutoff` before assuming an older market remains on the live routes. Switch to the matching `historical` command when required.
    - Read [references/command-contract.md](references/command-contract.md) for the full command surface and live-versus-historical workflow.
 
