@@ -8,6 +8,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | --- | --- | --- | --- |
 | `kalshi exchange status` | `/exchange/status` | none | top-level availability fields |
 | `kalshi exchange schedule` | `/exchange/schedule` | none | `schedule` |
+| `kalshi incentives` | `/incentive_programs` | none | `incentive_programs[]`; optional status/type/exact description, limit 10 (1–10000), explicit `data.next_cursor` continuation |
 | `kalshi milestones` | `/milestones` | none | `milestones[]` |
 | `kalshi milestones get` | `/milestones/{milestone_id}` | `--milestone-id` | `milestone` |
 | `kalshi milestones live` | `/live_data/milestone/{milestone_id}` | `--milestone-id` | `live_data`; optional boolean `--include-player-stats`, one public GET, count one, unchanged status/delay/details; cached data may be stale even without a delay flag |

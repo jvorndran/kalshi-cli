@@ -53,6 +53,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Family | Commands | Purpose |
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
+| Incentives | `incentives` | Discover public market reward programs by status, type, or exact description. |
 | Milestones | `milestones`, `milestones get`, `milestones live`, `milestones live batch` | Discover scheduled milestones, inspect related event tickers, and retrieve provider live data. |
 | Collections | `collections`, `collections get` | Discover multivariate event collections and inspect their associated events and combination rules. |
 | Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
@@ -61,6 +62,8 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Historical | `historical cutoff`, `historical markets`, `historical markets get`, `historical markets candlesticks`, `historical trades` | Find the live/archive boundary and retrieve archived public data. |
 
 Run `kalshi <command> --help` for exact options. The complete endpoint and flag contract is in the [command reference](skills/kalshi-cli/references/command-contract.md).
+
+Use `kalshi incentives --status active --type liquidity --limit 10` to inspect public market reward programs. Optional `--incentive-description` matches the provider's exact description. Each invocation makes one public GET `/incentive_programs`; the default page limit is 10 (1–10000). Read `data.next_cursor` and supply it as `--cursor` to continue. `count` describes `data.incentive_programs`; reward units, fixed-point strings, nulls, and unknown fields remain unchanged. This command only retrieves program metadata.
 
 `kalshi series sports` retrieves the official sport scope and competition index from `/search/filters_by_sport` in one public request without flags. The response preserves `filters_by_sports`, provider `sport_ordering`, and any additional fields inside `data`. Use this metadata to discover sports terminology; it does not identify a contract or add sport filters to other commands.
 

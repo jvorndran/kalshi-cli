@@ -10,6 +10,75 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("incentive discovery makes one public GET and preserves rewards, nulls and continuation", async () => {
+  const parsed = parseArguments(["incentives", "--status", "active", "--type", "liquidity",
+    "--incentive-description", "Market maker reward", "--limit", "25", "--cursor", "next+/="]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  const body = {incentive_programs: [
+    {market_ticker: "MARKET-B", period_reward: 12345, target_size_fp: "2.50", paid_out: false},
+    {market_ticker: "MARKET-A", period_reward: 0, unknown: null}
+  ], next_cursor: "continue", future: {enabled: false}};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/incentive_programs");
+    assert.deepEqual(Object.fromEntries(new URL(url).searchParams), {
+      status: "active", type: "liquidity", incentive_description: "Market maker reward", limit: "25", cursor: "next+/="
+    });
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+  assert.deepEqual(result.query, {limit: 25, cursor: "next+/=", status: "active", type: "liquidity", incentive_description: "Market maker reward"});
+  assert.match(renderYamlDocument(result), /target_size_fp: "2.50"/);
+  assert.deepEqual(buildRequest(parseArguments(["incentives"]).definition, parseArguments(["incentives"]).values).query, {limit: 10});
+});
+
+test("incentive options validate provider enums and page limits before fetching", async () => {
+  for (const status of ["all", "active", "upcoming", "closed", "paid_out"]) {
+    assert.equal(parseArguments(["incentives", "--status", status]).values.status, status);
+  }
+  for (const type of ["all", "liquidity", "volume", "margin_maker_volume", "margin_taker_volume"]) {
+    assert.equal(parseArguments(["incentives", "--type", type]).values.type, type);
+  }
+  for (const limit of ["1", "10000"]) {
+    assert.equal(parseArguments(["incentives", "--limit", limit]).values.limit, Number(limit));
+  }
+  for (const flags of [["--status", "open"], ["--type", "orders"], ["--limit", "0"], ["--limit", "10001"],
+    ["--limit", "1.5"], ["--incentive-description", " "], ["--all"], ["--ticker", "MARKET"]]) {
+    const result = await invoke(["incentives", ...flags], {fetchImpl: async () => assert.fail("invalid inputs must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+});
+
+test("incentive empty results, malformed data and provider errors remain atomic", async () => {
+  const empty = await invoke(["incentives"], {fetchImpl: async () => jsonResponse({incentive_programs: [], next_cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.equal(yamlScalar(empty.stdout, "count"), 0);
+  for (const body of [{}, {incentive_programs: null}, {incentive_programs: {}}]) {
+    const result = await invoke(["incentives"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(["incentives"], {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({message: "Try later"}, {status: 429});
+  }});
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.equal(calls, 1);
+  const help = await invoke(["incentives", "--help"]);
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /incentive-description/);
+});
+
 test("batch milestone live data sends repeated IDs once and preserves all provider fields", async () => {
   for (const value of [undefined, "true", "false"]) {
     const flags = value === undefined ? [] : ["--include-player-stats", value];
@@ -207,6 +276,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["incentives"], "/incentive_programs", "array"],
     [["milestones"], "/milestones", "array"],
     [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
     [["milestones", "live", "--milestone-id", "MILESTONE"], "/live_data/milestone/MILESTONE", "object"],

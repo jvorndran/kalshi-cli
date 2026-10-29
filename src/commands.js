@@ -150,6 +150,15 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["incentives"], "Discover public market incentive programs.", "/incentive_programs", "incentive_programs", [
+    pageLimitOption("incentive programs", {min: 1, max: 10000}),
+    cursorOption,
+    stringOption("status", "status", "Filter by program status.", {enum: ["all", "active", "upcoming", "closed", "paid_out"]}),
+    stringOption("type", "type", "Filter by incentive type.", {enum: ["all", "liquidity", "volume", "margin_maker_volume", "margin_taker_volume"]}),
+    stringOption("incentive-description", "incentive_description", "Filter by exact incentive description.")
+  ], undefined, "array", {
+    helpNotes: ["One public GET per page; pass data.next_cursor explicitly with --cursor to continue."]
+  }),
   command(["milestones"], "Discover public milestones and their related events.", "/milestones", "milestones", [
     pageLimitOption("milestones", {min: 1, max: 200}),
     cursorOption,
