@@ -57,7 +57,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Milestones | `milestones`, `milestones get`, `milestones live`, `milestones live batch` | Discover scheduled milestones, inspect related event tickers, and retrieve provider live data. |
 | Collections | `collections`, `collections get` | Discover multivariate event collections and inspect their associated events and combination rules. |
 | Series | `series`, `series tags`, `series sports`, `series get` | Discover category tags, sport scopes and competitions, and market families, then inspect one series. |
-| Events | `events`, `events multivariate`, `events get`, `events metadata`, `events candlesticks` | Discover standard or multivariate events, inspect settlement sources and metadata, or retrieve candles for an event's markets. |
+| Events | `events`, `events multivariate`, `events get`, `events live`, `events metadata`, `events candlesticks` | Discover standard or multivariate events, inspect settlement sources and metadata, or retrieve candles for an event's markets. |
 | Markets | `markets`, `markets get`, `markets orderbook`, `markets orderbooks`, `markets trades`, `markets candlesticks`, `markets candlesticks batch` | Retrieve market metadata, rules, bid depth, prints, and price history. |
 | Historical | `historical cutoff`, `historical markets`, `historical markets get`, `historical markets candlesticks`, `historical trades` | Find the live/archive boundary and retrieve archived public data. |
 
@@ -217,3 +217,5 @@ kalshi exchange schedule
 ```
 
 These commands each make one public GET with no parameters or credentials. Status reports exchange and trading availability; schedule reports standard trading hours and maintenance windows. Both preserve the complete provider response in `data` and emit `count: 1`, even when the exchange is inactive. A false availability flag is a successful observation, not a CLI error. See the official [status](https://docs.kalshi.com/api-reference/exchange/get-exchange-status) and [schedule](https://docs.kalshi.com/api-reference/exchange/get-exchange-schedule) contracts.
+
+Use `kalshi events live --event-ticker EVENT_FROM_DISCOVERY` to retrieve event-keyed live data such as crypto charts, commodity timeseries, or weather observations. Optional `--range 15min` passes a chart-window hint where the data type supports it; omit it for the provider default. The single public GET `/live_data/events/{event_ticker}` returns `count: 1` and preserves `data.live_data.type`, flexible `details`, historical flags, available ranges, nulls, and precision. Data may be cached or delayed. No polling or follow-up requests are implicit.

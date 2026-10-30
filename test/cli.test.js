@@ -10,6 +10,63 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("event live data uses one public GET and preserves flexible chart details", async () => {
+  const parsed = parseArguments(["events", "live", "--event-ticker", "KXBTC15M-EXAMPLE", "--range", "15min"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  const body = {live_data: {type: "crypto_price", is_historical: false, default_range: "1h",
+    range_options: ["15min", "1h"], details: {price: "123.4500", missing: null,
+      observations: [{timestamp: 0, value: 1.23456789}], future: {enabled: false}}}, unknown: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/events/KXBTC15M-EXAMPLE");
+    assert.equal(new URL(url).search, "?range=15min");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.query, {range: "15min"});
+  assert.deepEqual(result.data, body);
+  assert.match(renderYamlDocument(result), /price: "123.4500"/);
+  const defaultRange = parseArguments(["events", "live", "--event-ticker", "EVENT"]);
+  assert.deepEqual(buildRequest(defaultRange.definition, defaultRange.values).query, {});
+  assert.equal(parseArguments(["events", "live", "--event-ticker", "EVENT", "--range", "custom-window"]).values.range, "custom-window");
+});
+
+test("event live-data flags fail locally without requests or credentials", async () => {
+  for (const flags of [[], ["--event-ticker", "../bad"], ["--event-ticker", "EVENT", "--range", " "],
+    ["--event-ticker", "EVENT", "--include-player-stats"], ["--event-ticker", "EVENT", "--api-key", "unused"]]) {
+    const result = await invoke(["events", "live", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  const help = await invoke(["events", "live", "--help"]);
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /--range/);
+});
+
+test("event live-data malformed results and unavailable events fail atomically", async () => {
+  const argv = ["events", "live", "--event-ticker", "EVENT"];
+  for (const body of [{}, {live_data: null}, {live_data: []}]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(argv, {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({message: "No live data for this event"}, {status: 404});
+  }});
+  assert.equal(calls, 1);
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /No live data for this event/);
+});
+
 test("incentive discovery makes one public GET and preserves rewards, nulls and continuation", async () => {
   const parsed = parseArguments(["incentives", "--status", "active", "--type", "liquidity",
     "--incentive-description", "Market maker reward", "--limit", "25", "--cursor", "next+/="]);
@@ -291,6 +348,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["events"], "/events", "array"],
     [["events", "multivariate"], "/events/multivariate", "array"],
     [["events", "get", "--event-ticker", "EVENT"], "/events/EVENT", "object"],
+    [["events", "live", "--event-ticker", "EVENT"], "/live_data/events/EVENT", "object"],
     [["events", "metadata", "--event-ticker", "EVENT"], "/events/EVENT/metadata", "string"],
     [["events", "fee-changes"], "/events/fee_changes", "array"],
     [["events", "candlesticks", "--series-ticker", "SERIES", "--event-ticker", "EVENT", "--start-ts", "1", "--end-ts", "2", "--period-interval", "60"], "/series/SERIES/events/EVENT/candlesticks", "array"],
