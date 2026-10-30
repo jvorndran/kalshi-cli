@@ -254,6 +254,15 @@ export const COMMANDS = [
     tickerOption("event-ticker", "event_ticker", "Event ticker.", {required: true, location: "path", pathName: "event_ticker"}),
     booleanOption("with-nested-markets", "with_nested_markets", "Include markets inside the event.")
   ], undefined, "object"),
+  command(["events", "live"], "Inspect public event-keyed live data and chart observations.", "/live_data/events/{event_ticker}", "live_data", [
+    tickerOption("event-ticker", "event_ticker", "Event ticker returned by discovery.", {required: true, location: "path", pathName: "event_ticker"}),
+    stringOption("range", "range", "Optional chart range hint (for example 15min, 1h, or 1d); supported windows depend on the data type.")
+  ], undefined, "object", {
+    helpNotes: [
+      "One public GET; range is a provider hint and may not apply to every live data type.",
+      "Preserves type, details and historical flags. Live data may be cached or delayed; no polling or follow-up calls."
+    ]
+  }),
   command(["events", "metadata"], "Inspect event settlement sources, competition, and market metadata.", "/events/{event_ticker}/metadata", "image_url", [
     tickerOption("event-ticker", "event_ticker", "Event ticker returned by discovery.", {required: true, location: "path", pathName: "event_ticker"})
   ], undefined, "string"),

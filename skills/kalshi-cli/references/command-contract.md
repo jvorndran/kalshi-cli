@@ -23,6 +23,7 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | `kalshi collections` | `/multivariate_event_collections` | none | `multivariate_contracts[]`; optional `--status` (unopened/open/closed), `--associated-event-ticker`, `--series-ticker`, limit 10 (1–200), explicit cursor |
 | `kalshi collections get` | `/multivariate_event_collections/{collection_ticker}` | `--collection-ticker` | `multivariate_contract`; unchanged associated-event constraints, nulls, ordering, price ranges |
 | `kalshi events get` | `/events/{event_ticker}` | `--event-ticker` | `event` |
+| `kalshi events live` | `/live_data/events/{event_ticker}` | `--event-ticker` | `live_data`; optional `--range` chart-window hint, count one, unchanged flexible details and historical flags |
 | `kalshi events metadata` | `/events/{event_ticker}/metadata` | `--event-ticker` | top-level metadata fields |
 | `kalshi events fee-changes` | `/events/fee_changes` | none | `event_fee_changes[]`; optional `--event-ticker`, limit 10 (1–1000), explicit `--cursor`; null override resets preserved |
 | `kalshi events candlesticks` | `/series/{series_ticker}/events/{ticker}/candlesticks` | series ticker, event ticker, start, end, interval | `market_tickers[]` plus parallel candle arrays |
@@ -116,3 +117,5 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 ## Exchange availability
 
 `kalshi exchange status` and `kalshi exchange schedule` each make one public, unauthenticated GET with no query parameters. Both return `count: 1`, including when `exchange_active` is false. Availability flags, optional resume estimates, per-index status, standard hours, maintenance windows, and unknown provider fields remain unchanged in `data`. A successful status response reports availability; inactive trading is not a CLI error. Neither command automatically retries, polls, or gates other commands.
+
+Use `kalshi events live --event-ticker EVENT_FROM_DISCOVERY` to retrieve event-keyed live data such as crypto charts, commodity timeseries, or weather observations. Optional `--range 15min` passes a chart-window hint where the data type supports it; omit it for the provider default. The single public GET `/live_data/events/{event_ticker}` returns `count: 1` and preserves `data.live_data.type`, flexible `details`, historical flags, available ranges, nulls, and precision. Data may be cached or delayed. No polling or follow-up requests are implicit.
