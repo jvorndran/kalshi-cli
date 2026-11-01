@@ -53,6 +53,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Family | Commands | Purpose |
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
+| Structured targets | `structured-targets`, `structured-targets get` | Discover target identities, details, and provider source IDs. |
 | Incentives | `incentives` | Discover public market reward programs by status, type, or exact description. |
 | Milestones | `milestones`, `milestones get`, `milestones live`, `milestones live batch` | Discover scheduled milestones, inspect related event tickers, and retrieve provider live data. |
 | Collections | `collections`, `collections get` | Discover multivariate event collections and inspect their associated events and combination rules. |
@@ -219,3 +220,5 @@ kalshi exchange schedule
 These commands each make one public GET with no parameters or credentials. Status reports exchange and trading availability; schedule reports standard trading hours and maintenance windows. Both preserve the complete provider response in `data` and emit `count: 1`, even when the exchange is inactive. A false availability flag is a successful observation, not a CLI error. See the official [status](https://docs.kalshi.com/api-reference/exchange/get-exchange-status) and [schedule](https://docs.kalshi.com/api-reference/exchange/get-exchange-schedule) contracts.
 
 Use `kalshi events live --event-ticker EVENT_FROM_DISCOVERY` to retrieve event-keyed live data such as crypto charts, commodity timeseries, or weather observations. Optional `--range 15min` passes a chart-window hint where the data type supports it; omit it for the provider default. The single public GET `/live_data/events/{event_ticker}` returns `count: 1` and preserves `data.live_data.type`, flexible `details`, historical flags, available ranges, nulls, and precision. Data may be cached or delayed. No polling or follow-up requests are implicit.
+
+Use `kalshi structured-targets --type football_player --competition NCAAF --page-size 10` to discover public target identities and source IDs. Optional `--ids ID_A,ID_B` becomes repeated `ids` query parameters (up to 2000). Pages default to 10 (1–2000); pass `data.cursor` explicitly as `--cursor` to continue. Inspect a returned ID with `structured-targets get --structured-target-id ID`. Each command makes one unauthenticated GET and preserves names, details, source IDs, nulls, and unknown fields in `data`. Target identity does not establish market rules or live-data freshness.

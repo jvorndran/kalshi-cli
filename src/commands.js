@@ -150,6 +150,18 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["structured-targets"], "Discover public structured targets and source identifiers.", "/structured_targets", "structured_targets", [
+    stringOption("ids", "ids", "Comma-separated structured target IDs (1-2000).", {csv: true, maxItems: 2000, csvTickers: true, repeatedQuery: true}),
+    stringOption("type", "type", "Filter by provider target type."),
+    stringOption("competition", "competition", "Filter by league, conference, division, tour, or leagues entry."),
+    integerOption("page-size", "page_size", "Maximum targets per page (1-2000; default 10).", {min: 1, max: 2000, defaultValue: DEFAULT_PAGE_LIMIT}),
+    cursorOption
+  ], undefined, "array", {
+    helpNotes: ["One public GET per page; continue only by passing data.cursor explicitly with --cursor."]
+  }),
+  command(["structured-targets", "get"], "Inspect one discovered public structured target.", "/structured_targets/{structured_target_id}", "structured_target", [
+    tickerOption("structured-target-id", "structured_target_id", "Structured target ID returned by discovery.", {required: true, location: "path", pathName: "structured_target_id"})
+  ], undefined, "object"),
   command(["incentives"], "Discover public market incentive programs.", "/incentive_programs", "incentive_programs", [
     pageLimitOption("incentive programs", {min: 1, max: 10000}),
     cursorOption,

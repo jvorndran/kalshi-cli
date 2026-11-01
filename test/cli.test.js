@@ -10,6 +10,86 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("structured target discovery maps repeated IDs and provider pagination without follow-ups", async () => {
+  const parsed = parseArguments(["structured-targets", "--ids", "ID_A,ID_B", "--type", "football_player",
+    "--competition", "NCAAF", "--page-size", "2", "--cursor", "next+page="]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  const body = {structured_targets: [{id: "ID_B", name: "Player", details: {rating: "1.2500", unknown: null},
+    source_ids: {future: false}}], cursor: "continue", future: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    const target = new URL(url);
+    assert.equal(target.pathname, "/trade-api/v2/structured_targets");
+    assert.deepEqual(target.searchParams.getAll("ids"), ["ID_A", "ID_B"]);
+    assert.equal(target.searchParams.get("page_size"), "2");
+    assert.equal(target.searchParams.get("competition"), "NCAAF");
+    assert.equal(target.searchParams.get("type"), "football_player");
+    assert.equal(target.searchParams.get("cursor"), "next+page=");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  assert.deepEqual(result.query.ids, ["ID_A", "ID_B"]);
+  const defaults = parseArguments(["structured-targets"]);
+  assert.deepEqual(buildRequest(defaults.definition, defaults.values).query, {page_size: 10});
+  assert.equal(parseArguments(["structured-targets", "--page-size", "2000"]).values.page_size, 2000);
+});
+
+test("structured target detail preserves raw data and rejects unsafe or unsupported flags", async () => {
+  const parsed = parseArguments(["structured-targets", "get", "--structured-target-id", "ID_A"]);
+  const body = {structured_target: {id: "ID_A", details: {missing: null, amount: "0.0000"}}, future: null};
+  const result = await executeRequest(parsed.definition, buildRequest(parsed.definition, parsed.values), {
+    fetchImpl: async (url) => {
+      assert.equal(new URL(url).pathname, "/trade-api/v2/structured_targets/ID_A");
+      assert.equal(new URL(url).search, "");
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  for (const argv of [
+    ["structured-targets", "--page-size", "0"], ["structured-targets", "--page-size", "2001"],
+    ["structured-targets", "--ids", "ID_A,,ID_B"], ["structured-targets", "--ids", "../bad"],
+    ["structured-targets", "--ids", Array(2001).fill("ID_A").join(",")],
+    ["structured-targets", "--type", " "], ["structured-targets", "--limit", "1"],
+    ["structured-targets", "get"], ["structured-targets", "get", "--structured-target-id", "../bad"],
+    ["structured-targets", "get", "--structured-target-id", "ID_A", "--api-key", "unused"],
+  ]) {
+    const invalid = await invoke(argv, {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(invalid.exitCode, 2);
+    assert.equal(invalid.stdout, "");
+  }
+});
+
+test("structured target empty pages, malformed data and provider failures are atomic", async () => {
+  const empty = await invoke(["structured-targets"], {fetchImpl: async () => jsonResponse({structured_targets: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0/);
+  for (const [argv, bodies] of [
+    [["structured-targets"], [{}, {structured_targets: null}, {structured_targets: {}}]],
+    [["structured-targets", "get", "--structured-target-id", "ID_A"], [{}, {structured_target: null}, {structured_target: []}]],
+  ]) {
+    for (const body of bodies) {
+      const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.stdout, "");
+      assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+    }
+  }
+  const failed = await invoke(["structured-targets", "get", "--structured-target-id", "ID_A"], {
+    fetchImpl: async () => jsonResponse({message: "Target not found"}, {status: 404})
+  });
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /Target not found/);
+  assert.match((await invoke(["structured-targets", "--help"])).stdout, /--page-size/);
+});
+
 test("event live data uses one public GET and preserves flexible chart details", async () => {
   const parsed = parseArguments(["events", "live", "--event-ticker", "KXBTC15M-EXAMPLE", "--range", "15min"]);
   const request = buildRequest(parsed.definition, parsed.values);
@@ -333,6 +413,8 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["structured-targets"], "/structured_targets", "array"],
+    [["structured-targets", "get", "--structured-target-id", "MILESTONE"], "/structured_targets/MILESTONE", "object"],
     [["incentives"], "/incentive_programs", "array"],
     [["milestones"], "/milestones", "array"],
     [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
