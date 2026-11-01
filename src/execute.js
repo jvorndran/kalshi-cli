@@ -100,6 +100,7 @@ function validateShape(definition, body) {
   if (value === undefined) {
     throw new CliError("upstream_shape_error", `Kalshi response is missing the expected ${definition.resultKey} field.`, {exitCode: 1});
   }
+  if (value === null && definition.nullableResult === true) return;
   if (definition.resultType === "array" && !Array.isArray(value)) {
     throw new CliError("upstream_shape_error", `Kalshi response field ${definition.resultKey} is not an array.`, {exitCode: 1});
   }

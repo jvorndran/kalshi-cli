@@ -23,7 +23,7 @@ function writeYaml(stream, value) {
   write(stream, renderYamlDocument(value));
 }
 
-function renderResultYaml(result) {
+function renderResultYaml(result, definition) {
   const rawData = result[RAW_DATA];
   const rendered = renderYamlDocument(
     typeof rawData === "string" ? {...result, data: parseLosslessJson(rawData)} : result
@@ -34,14 +34,14 @@ function renderResultYaml(result) {
       command: result.command,
       endpoint: result.endpoint,
       query: result.query,
-      hint: "Use a smaller --limit, narrower filter, or shorter candle range."
+      hint: definition.outputTooLargeHint ?? "Use a smaller --limit, narrower filter, or shorter candle range."
     });
   }
   return rendered;
 }
 
-function writeResultYaml(stream, result) {
-  write(stream, renderResultYaml(result));
+function writeResultYaml(stream, result, definition) {
+  write(stream, renderResultYaml(result, definition));
 }
 
 export async function runCli(argv, options = {}) {
@@ -65,7 +65,7 @@ export async function runCli(argv, options = {}) {
     const request = buildRequest(parsed.definition, parsed.values);
     const result = await executeRequest(parsed.definition, request, options);
     try {
-      writeResultYaml(stdout, result);
+      writeResultYaml(stdout, result, parsed.definition);
     } catch (error) {
       if (error instanceof CliError) throw error;
       throw new CliError("serialization_error", "Unable to serialize the CLI result safely.", {exitCode: 1});

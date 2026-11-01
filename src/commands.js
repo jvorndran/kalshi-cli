@@ -150,6 +150,19 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["structured-targets"], "Discover public structured targets and source identifiers.", "/structured_targets", "structured_targets", [
+    stringOption("ids", "ids", "Comma-separated structured target IDs (1-2000).", {csv: true, maxItems: 2000, csvTickers: true, repeatedQuery: true}),
+    stringOption("type", "type", "Filter by provider target type."),
+    stringOption("competition", "competition", "Filter by league, conference, division, tour, or leagues entry."),
+    integerOption("page-size", "page_size", "Maximum targets per page (1-2000; default 10).", {min: 1, max: 2000, defaultValue: DEFAULT_PAGE_LIMIT}),
+    cursorOption
+  ], undefined, "array", {
+    outputTooLargeHint: "Use a smaller --page-size or narrow --ids, --type, or --competition.",
+    helpNotes: ["One public GET per page; continue only by passing data.cursor explicitly with --cursor."]
+  }),
+  command(["structured-targets", "get"], "Inspect one discovered public structured target.", "/structured_targets/{structured_target_id}", "structured_target", [
+    tickerOption("structured-target-id", "structured_target_id", "Structured target ID returned by discovery.", {required: true, location: "path", pathName: "structured_target_id"})
+  ], undefined, "object"),
   command(["incentives"], "Discover public market incentive programs.", "/incentive_programs", "incentive_programs", [
     pageLimitOption("incentive programs", {min: 1, max: 10000}),
     cursorOption,
@@ -173,6 +186,17 @@ export const COMMANDS = [
   command(["milestones", "get"], "Inspect one public milestone by its discovered ID.", "/milestones/{milestone_id}", "milestone", [
     tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"})
   ], undefined, "object"),
+  command(["milestones", "game-stats"], "Inspect public play-by-play game statistics for a milestone.", "/live_data/milestone/{milestone_id}/game_stats", "pbp", [
+    tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"})
+  ], undefined, "object", {
+    nullableResult: true,
+    outputTooLargeHint: "Game stats have no narrowing options. Use milestones live for a compact snapshot or inspect another milestone.",
+    helpNotes: [
+      "One public GET; pbp may be null for unsupported milestones or missing provider mappings (count zero).",
+      "This endpoint has no pagination or narrowing options; oversized responses fail before stdout is written.",
+      "Preserve period and event data as reported. Cached or delayed play-by-play does not establish freshness."
+    ]
+  }),
   command(["milestones", "live"], "Inspect public live data for a discovered milestone.", "/live_data/milestone/{milestone_id}", "live_data", [
     tickerOption("milestone-id", "milestone_id", "Milestone ID returned by discovery.", {required: true, location: "path", pathName: "milestone_id"}),
     booleanOption("include-player-stats", "include_player_stats", "Include available player statistics explicitly with true or false.")

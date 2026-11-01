@@ -8,9 +8,12 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | --- | --- | --- | --- |
 | `kalshi exchange status` | `/exchange/status` | none | top-level availability fields |
 | `kalshi exchange schedule` | `/exchange/schedule` | none | `schedule` |
+| `kalshi structured-targets` | `/structured_targets` | none | `structured_targets[]`; optional repeated IDs, type, competition, page-size10 (1–2000), explicit cursor |
+| `kalshi structured-targets get` | `/structured_targets/{structured_target_id}` | `--structured-target-id` | `structured_target`; unchanged metadata, count one |
 | `kalshi incentives` | `/incentive_programs` | none | `incentive_programs[]`; optional status/type/exact description, limit 10 (1–10000), explicit `data.next_cursor` continuation |
 | `kalshi milestones` | `/milestones` | none | `milestones[]` |
 | `kalshi milestones get` | `/milestones/{milestone_id}` | `--milestone-id` | `milestone` |
+| `kalshi milestones game-stats` | `/live_data/milestone/{milestone_id}/game_stats` | `--milestone-id` | `pbp` object or null; count one or zero, unchanged periods/events, no polling |
 | `kalshi milestones live` | `/live_data/milestone/{milestone_id}` | `--milestone-id` | `live_data`; optional boolean `--include-player-stats`, one public GET, count one, unchanged status/delay/details; cached data may be stale even without a delay flag |
 | `kalshi milestones live batch` | `/live_data/batch` | `--milestone-ids` (1–100 safe comma-separated IDs) | `live_datas[]`; repeated query parameters, optional explicit `--include-player-stats`, no pagination or polling |
 | `kalshi series` | `/series` | one of `--category`, `--tags`, `--min-updated-ts` | `series[]` |
@@ -119,3 +122,7 @@ Live and historical candle schemas differ. Preserve the raw response rather than
 `kalshi exchange status` and `kalshi exchange schedule` each make one public, unauthenticated GET with no query parameters. Both return `count: 1`, including when `exchange_active` is false. Availability flags, optional resume estimates, per-index status, standard hours, maintenance windows, and unknown provider fields remain unchanged in `data`. A successful status response reports availability; inactive trading is not a CLI error. Neither command automatically retries, polls, or gates other commands.
 
 Use `kalshi events live --event-ticker EVENT_FROM_DISCOVERY` to retrieve event-keyed live data such as crypto charts, commodity timeseries, or weather observations. Optional `--range 15min` passes a chart-window hint where the data type supports it; omit it for the provider default. The single public GET `/live_data/events/{event_ticker}` returns `count: 1` and preserves `data.live_data.type`, flexible `details`, historical flags, available ranges, nulls, and precision. Data may be cached or delayed. No polling or follow-up requests are implicit.
+
+Use `kalshi structured-targets --type football_player --competition NCAAF --page-size 10` to discover public target identities and source IDs. Optional `--ids ID_A,ID_B` becomes repeated `ids` query parameters (up to 2000). Pages default to 10 (1–2000); pass `data.cursor` explicitly as `--cursor` to continue. Inspect a returned ID with `structured-targets get --structured-target-id ID`. Each command makes one unauthenticated GET and preserves names, details, source IDs, nulls, and unknown fields in `data`. Target identity does not establish market rules or live-data freshness.
+
+Use `kalshi milestones game-stats --milestone-id ID_FROM_DISCOVERY` to retrieve play-by-play statistics in one public GET `/live_data/milestone/{milestone_id}/game_stats`. The unchanged `data.pbp` object contains provider periods and events. A null `pbp` is preserved with count zero for unsupported milestones or missing provider mappings; it does not prove that no game occurred. Objects have count one. No polling, retries, credentials, or follow-up calls are added; cached or delayed play-by-play does not establish freshness. The existing output cap applies; this endpoint has no pagination or narrowing flags. Oversized responses fail before stdout is written; `milestones live` offers a compact snapshot.

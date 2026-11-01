@@ -10,6 +10,156 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("milestone game stats use one public GET and preserve play-by-play and null availability", async () => {
+  const parsed = parseArguments(["milestones", "game-stats", "--milestone-id", "MILESTONE"]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  for (const pbp of [{periods: [{events: [{clock: "00:00", yards: 0, complete: false, unknown: null,
+    fixed_point: "1.2500"}]}], future: null}, null]) {
+    let calls = 0;
+    const body = {pbp, future: null};
+    const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/milestone/MILESTONE/game_stats");
+      assert.equal(new URL(url).search, "");
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }});
+    assert.equal(calls, 1);
+    assert.equal(result.count, pbp === null ? 0 : 1);
+    assert.deepEqual(result.data, body);
+    const output = await invoke(["milestones", "game-stats", "--milestone-id", "MILESTONE"], {
+      fetchImpl: async () => jsonResponse(body)
+    });
+    assert.equal(output.exitCode, 0);
+    assert.equal(output.stderr, "");
+    if (pbp === null) assert.match(output.stdout, /pbp: null/);
+    else assert.match(output.stdout, /fixed_point: "1.2500"/);
+  }
+});
+
+test("game-stat flags and malformed payloads fail atomically", async () => {
+  for (const flags of [[], ["--milestone-id", "../bad"], ["--milestone-id", "MILESTONE", "--limit", "1"],
+    ["--milestone-id", "MILESTONE", "--include-player-stats"], ["--milestone-id", "MILESTONE", "--api-key", "unused"]]) {
+    const result = await invoke(["milestones", "game-stats", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  for (const body of [{}, {pbp: []}, {pbp: "bad"}, null]) {
+    const result = await invoke(["milestones", "game-stats", "--milestone-id", "MILESTONE"], {
+      fetchImpl: async () => jsonResponse(body)
+    });
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  assert.match((await invoke(["milestones", "game-stats", "--help"])).stdout, /unsupported/);
+});
+
+test("game-stat not-found and oversized output preserve existing failure contracts", async () => {
+  const argv = ["milestones", "game-stats", "--milestone-id", "MILESTONE"];
+  let calls = 0;
+  const missing = await invoke(argv, {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({message: "No game stats"}, {status: 404});
+  }});
+  assert.equal(calls, 1);
+  assert.equal(missing.exitCode, 1);
+  assert.equal(missing.stdout, "");
+  assert.match(missing.stderr, /No game stats/);
+  const large = await invoke(argv, {fetchImpl: async () => jsonResponse({pbp: {text: "x".repeat(MAX_OUTPUT_BYTES)}})});
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /Game stats have no narrowing options/);
+  assert.doesNotMatch(large.stderr, /smaller --limit/);
+});
+
+test("structured target discovery maps repeated IDs and provider pagination without follow-ups", async () => {
+  const parsed = parseArguments(["structured-targets", "--ids", "ID_A,ID_B", "--type", "football_player",
+    "--competition", "NCAAF", "--page-size", "2", "--cursor", "next+page="]);
+  const request = buildRequest(parsed.definition, parsed.values);
+  const body = {structured_targets: [{id: "ID_B", name: "Player", details: {rating: "1.2500", unknown: null},
+    source_ids: {future: false}}], cursor: "continue", future: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    const target = new URL(url);
+    assert.equal(target.pathname, "/trade-api/v2/structured_targets");
+    assert.deepEqual(target.searchParams.getAll("ids"), ["ID_A", "ID_B"]);
+    assert.equal(target.searchParams.get("page_size"), "2");
+    assert.equal(target.searchParams.get("competition"), "NCAAF");
+    assert.equal(target.searchParams.get("type"), "football_player");
+    assert.equal(target.searchParams.get("cursor"), "next+page=");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  assert.deepEqual(result.query.ids, ["ID_A", "ID_B"]);
+  const defaults = parseArguments(["structured-targets"]);
+  assert.deepEqual(buildRequest(defaults.definition, defaults.values).query, {page_size: 10});
+  assert.equal(parseArguments(["structured-targets", "--page-size", "2000"]).values.page_size, 2000);
+});
+
+test("structured target detail preserves raw data and rejects unsafe or unsupported flags", async () => {
+  const parsed = parseArguments(["structured-targets", "get", "--structured-target-id", "ID_A"]);
+  const body = {structured_target: {id: "ID_A", details: {missing: null, amount: "0.0000"}}, future: null};
+  const result = await executeRequest(parsed.definition, buildRequest(parsed.definition, parsed.values), {
+    fetchImpl: async (url) => {
+      assert.equal(new URL(url).pathname, "/trade-api/v2/structured_targets/ID_A");
+      assert.equal(new URL(url).search, "");
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.data, body);
+  for (const argv of [
+    ["structured-targets", "--page-size", "0"], ["structured-targets", "--page-size", "2001"],
+    ["structured-targets", "--ids", "ID_A,,ID_B"], ["structured-targets", "--ids", "../bad"],
+    ["structured-targets", "--ids", Array(2001).fill("ID_A").join(",")],
+    ["structured-targets", "--type", " "], ["structured-targets", "--limit", "1"],
+    ["structured-targets", "get"], ["structured-targets", "get", "--structured-target-id", "../bad"],
+    ["structured-targets", "get", "--structured-target-id", "ID_A", "--api-key", "unused"],
+  ]) {
+    const invalid = await invoke(argv, {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(invalid.exitCode, 2);
+    assert.equal(invalid.stdout, "");
+  }
+});
+
+test("structured target empty pages, malformed data and provider failures are atomic", async () => {
+  const empty = await invoke(["structured-targets"], {fetchImpl: async () => jsonResponse({structured_targets: [], cursor: ""})});
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0/);
+  for (const [argv, bodies] of [
+    [["structured-targets"], [{}, {structured_targets: null}, {structured_targets: {}}]],
+    [["structured-targets", "get", "--structured-target-id", "ID_A"], [{}, {structured_target: null}, {structured_target: []}]],
+  ]) {
+    for (const body of bodies) {
+      const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.stdout, "");
+      assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+    }
+  }
+  const failed = await invoke(["structured-targets", "get", "--structured-target-id", "ID_A"], {
+    fetchImpl: async () => jsonResponse({message: "Target not found"}, {status: 404})
+  });
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /Target not found/);
+  assert.match((await invoke(["structured-targets", "--help"])).stdout, /--page-size/);
+  const large = await invoke(["structured-targets"], {fetchImpl: async () => jsonResponse({structured_targets: [{text: "x".repeat(MAX_OUTPUT_BYTES)}]})});
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.match(large.stderr, /smaller --page-size/);
+});
+
 test("event live data uses one public GET and preserves flexible chart details", async () => {
   const parsed = parseArguments(["events", "live", "--event-ticker", "KXBTC15M-EXAMPLE", "--range", "15min"]);
   const request = buildRequest(parsed.definition, parsed.values);
@@ -333,9 +483,12 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["structured-targets"], "/structured_targets", "array"],
+    [["structured-targets", "get", "--structured-target-id", "MILESTONE"], "/structured_targets/MILESTONE", "object"],
     [["incentives"], "/incentive_programs", "array"],
     [["milestones"], "/milestones", "array"],
     [["milestones", "get", "--milestone-id", "MILESTONE"], "/milestones/MILESTONE", "object"],
+    [["milestones", "game-stats", "--milestone-id", "MILESTONE"], "/live_data/milestone/MILESTONE/game_stats", "object"],
     [["milestones", "live", "--milestone-id", "MILESTONE"], "/live_data/milestone/MILESTONE", "object"],
     [["milestones", "live", "batch", "--milestone-ids", "MILESTONE"], "/live_data/batch", "array"],
     [["series", "--category", "Sports"], "/series", "array"],
