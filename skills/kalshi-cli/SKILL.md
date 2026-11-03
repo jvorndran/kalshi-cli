@@ -62,3 +62,5 @@ Use the structured error code, command, endpoint, query, status, and hint. Corre
 ## Safety boundary
 
 This skill retrieves decision-support evidence only. It never reads credentials, accesses portfolio or order endpoints, opens a WebSocket, places a trade, sizes a position, or promises an edge. Route statistical interpretation to the relevant research skill after the raw market identity and provenance are secure.
+
+Use `kalshi weather --city miami --last-sec 300` for a bounded public city temperature index. Alternatively, pair `--from` and `--to` with inclusive Unix millisecond boundaries; do not combine them with `--last-sec` (seconds). Add `--detailed true` for per-station readings and quality-control dispositions, or pass `false` explicitly. One unauthenticated GET preserves the full `timeseries`, units, configuration, unknown fields, nulls, precision, and missing-minute gaps. Published values are Fahrenheit. Incomplete points and labelled historical backfills are not canonical settlement values; verify market rules separately. No polling, retries, or follow-up calls occur. Narrow the window or omit station detail if the existing output cap is reached.
