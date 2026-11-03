@@ -10,6 +10,62 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("weather calibrations preserve the complete configuration timeline and Celsius offsets", async () => {
+  const argv = ["weather", "calibrations", "--city", "miami"];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {});
+  const body = {city: "miami", units: "celsius", calibrations: [
+    {config_version: "v1", effective_at_ms: 0, city_reference_c: -0.123456789,
+      stations: [{station_id: "KMIA1M", weight: 0, offset_c: 0, update_note: null}]},
+    {config_version: "v2", effective_at_ms: 60000, city_reference_c: 0,
+      stations: [], unknown: false}
+  ], future: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/weather/miami/calibrations");
+    assert.equal(new URL(url).search, "");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+  const empty = await invoke(argv, {fetchImpl: async () => jsonResponse({city: "miami", units: "celsius", calibrations: []})});
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0/);
+});
+
+test("weather calibration input, payload, and provider failures remain atomic", async () => {
+  for (const flags of [[], ["--city", "../bad"], ["--city", " "],
+    ["--city", "miami", "--last-sec", "60"], ["--city", "miami", "--detailed"],
+    ["--city", "miami", "--cursor", "next"], ["--city", "miami", "--api-key", "unused"]]) {
+    const result = await invoke(["weather", "calibrations", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  const argv = ["weather", "calibrations", "--city", "miami"];
+  for (const body of [{}, {calibrations: null}, {calibrations: {}}, null]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  const invalidCity = await invoke(argv, {fetchImpl: async () => jsonResponse({message: "Unknown city"}, {status: 400})});
+  assert.equal(invalidCity.exitCode, 1);
+  assert.equal(invalidCity.stdout, "");
+  assert.match(invalidCity.stderr, /Unknown city/);
+  const large = await invoke(argv, {fetchImpl: async () => jsonResponse({calibrations: [{text: "x".repeat(MAX_OUTPUT_BYTES)}]})});
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /no narrowing options/);
+  assert.doesNotMatch(large.stderr, /smaller --limit/);
+});
+
 test("weather index uses an explicit window and preserves temperatures, gaps, and station audits", async () => {
   const argv = ["weather", "--city", "miami", "--from", "0", "--to", "60000", "--detailed", "false"];
   const parsed = parseArguments(argv);
@@ -549,6 +605,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
     [["weather", "--city", "miami", "--last-sec", "60"], "/live_data/weather/miami", "array"],
+    [["weather", "calibrations", "--city", "miami"], "/live_data/weather/miami/calibrations", "array"],
     [["structured-targets"], "/structured_targets", "array"],
     [["structured-targets", "get", "--structured-target-id", "MILESTONE"], "/structured_targets/MILESTONE", "object"],
     [["incentives"], "/incentive_programs", "array"],

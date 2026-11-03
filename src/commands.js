@@ -173,6 +173,12 @@ export const COMMANDS = [
     outputTooLargeHint: "Use a smaller --last-sec or --from/--to window, or omit --detailed.",
     helpNotes: ["Supply --last-sec or paired --from/--to to bound history. Published values are Fahrenheit; missing minutes remain gaps. Incomplete points and historical backfills are not canonical settlement values."]
   }),
+  command(["weather", "calibrations"], "Inspect a city's published weather-index configuration timeline.", "/live_data/weather/{city}/calibrations", "calibrations", [
+    tickerOption("city", "city", "Weather index city ID, for example miami.", {required: true, location: "path", pathName: "city"})
+  ], undefined, "array", {
+    outputTooLargeHint: "Weather calibration timelines have no narrowing options; the complete timeline exceeds the output cap.",
+    helpNotes: ["One public GET returns the complete provider timeline. Station offsets and city references are Celsius; published index temperatures are Fahrenheit. No pagination, polling, or automatic index request."]
+  }),
   command(["structured-targets"], "Discover public structured targets and source identifiers.", "/structured_targets", "structured_targets", [
     stringOption("ids", "ids", "Comma-separated structured target IDs (1-2000).", {csv: true, maxItems: 2000, csvTickers: true, repeatedQuery: true}),
     stringOption("type", "type", "Filter by provider target type."),
