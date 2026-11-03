@@ -7,6 +7,8 @@ The CLI uses the fixed base URL `https://external-api.kalshi.com/trade-api/v2`, 
 | Command | Endpoint | Required flags | Primary result |
 | --- | --- | --- | --- |
 | `kalshi exchange status` | `/exchange/status` | none | top-level availability fields |
+| `kalshi weather` | `/live_data/weather/{city}` | `--city` and either `--last-sec` or paired `--from`/`--to` | `timeseries[]`; unchanged Fahrenheit values, gaps, status, and optional station audits |
+| `kalshi weather calibrations` | `/live_data/weather/{city}/calibrations` | `--city` | `calibrations[]`; complete provider timeline, Celsius offsets/reference, unchanged station order and precision |
 | `kalshi exchange schedule` | `/exchange/schedule` | none | `schedule` |
 | `kalshi structured-targets` | `/structured_targets` | none | `structured_targets[]`; optional repeated IDs, type, competition, page-size10 (1–2000), explicit cursor |
 | `kalshi structured-targets get` | `/structured_targets/{structured_target_id}` | `--structured-target-id` | `structured_target`; unchanged metadata, count one |

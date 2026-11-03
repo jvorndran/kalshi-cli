@@ -10,6 +10,127 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("weather calibrations preserve the complete configuration timeline and Celsius offsets", async () => {
+  const argv = ["weather", "calibrations", "--city", "miami"];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {});
+  const body = {city: "miami", units: "celsius", calibrations: [
+    {config_version: "v1", effective_at_ms: 0, city_reference_c: -0.123456789,
+      stations: [{station_id: "KMIA1M", weight: 0, offset_c: 0, update_note: null}]},
+    {config_version: "v2", effective_at_ms: 60000, city_reference_c: 0,
+      stations: [], unknown: false}
+  ], future: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/weather/miami/calibrations");
+    assert.equal(new URL(url).search, "");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+  const empty = await invoke(argv, {fetchImpl: async () => jsonResponse({city: "miami", units: "celsius", calibrations: []})});
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0/);
+});
+
+test("weather calibration input, payload, and provider failures remain atomic", async () => {
+  for (const flags of [[], ["--city", "../bad"], ["--city", " "],
+    ["--city", "miami", "--last-sec", "60"], ["--city", "miami", "--detailed"],
+    ["--city", "miami", "--cursor", "next"], ["--city", "miami", "--api-key", "unused"]]) {
+    const result = await invoke(["weather", "calibrations", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  const argv = ["weather", "calibrations", "--city", "miami"];
+  for (const body of [{}, {calibrations: null}, {calibrations: {}}, null]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  const invalidCity = await invoke(argv, {fetchImpl: async () => jsonResponse({message: "Unknown city"}, {status: 400})});
+  assert.equal(invalidCity.exitCode, 1);
+  assert.equal(invalidCity.stdout, "");
+  assert.match(invalidCity.stderr, /Unknown city/);
+  const large = await invoke(argv, {fetchImpl: async () => jsonResponse({calibrations: [{text: "x".repeat(MAX_OUTPUT_BYTES)}]})});
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /no narrowing options/);
+  assert.doesNotMatch(large.stderr, /smaller --limit/);
+});
+
+test("weather index uses an explicit window and preserves temperatures, gaps, and station audits", async () => {
+  const argv = ["weather", "--city", "miami", "--from", "0", "--to", "60000", "--detailed", "false"];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {from: 0, to: 60000, detailed: false});
+  const body = {city: "miami", units: "fahrenheit", config_version: "v1", timeseries: [
+    {t: 0, v: 0, status: "degraded", stations: [{code: "ok", temp_f: 72.123456, unknown: null}]},
+    {t: 60000, status: "incomplete", stations: [], unknown: false}
+  ], future: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).pathname, "/trade-api/v2/live_data/weather/miami");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+  const trailingArgs = parseArguments(["weather", "--city", "miami", "--last-sec", "60", "--detailed"]);
+  const trailing = buildRequest(trailingArgs.definition, trailingArgs.values);
+  assert.deepEqual(trailing.query, {last_sec: 60, detailed: true});
+  const empty = await invoke(["weather", "--city", "miami", "--last-sec", "60"], {
+    fetchImpl: async () => jsonResponse({city: "miami", units: "fahrenheit", timeseries: []})
+  });
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0/);
+});
+
+test("weather flags reject invalid scopes and unsupported access before requests", async () => {
+  for (const flags of [[], ["--city", "../bad", "--last-sec", "60"], ["--city", "miami"],
+    ["--city", "miami", "--from", "0"], ["--city", "miami", "--to", "1"],
+    ["--city", "miami", "--from", "2", "--to", "1"],
+    ["--city", "miami", "--from", "0", "--to", "1", "--last-sec", "60"],
+    ["--city", "miami", "--last-sec", "0"], ["--city", "miami", "--last-sec", "1.5"],
+    ["--city", "miami", "--last-sec", "9007199254740992"],
+    ["--city", "miami", "--last-sec", "60", "--api-key", "unused"],
+    ["--city", "miami", "--last-sec", "60", "--limit", "1"]]) {
+    const result = await invoke(["weather", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+});
+
+test("weather shape, provider errors, and output caps retain atomic streams", async () => {
+  const argv = ["weather", "--city", "miami", "--last-sec", "60"];
+  for (const body of [{}, {timeseries: null}, {timeseries: {}}, null]) {
+    const result = await invoke(argv, {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  const missing = await invoke(argv, {fetchImpl: async () => jsonResponse({message: "Unknown city"}, {status: 400})});
+  assert.equal(missing.exitCode, 1);
+  assert.equal(missing.stdout, "");
+  assert.match(missing.stderr, /Unknown city/);
+  const large = await invoke(argv, {fetchImpl: async () => jsonResponse({timeseries: [{text: "x".repeat(MAX_OUTPUT_BYTES)}]})});
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /--last-sec/);
+});
+
 test("milestone game stats use one public GET and preserve play-by-play and null availability", async () => {
   const parsed = parseArguments(["milestones", "game-stats", "--milestone-id", "MILESTONE"]);
   const request = buildRequest(parsed.definition, parsed.values);
@@ -483,6 +604,8 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["weather", "--city", "miami", "--last-sec", "60"], "/live_data/weather/miami", "array"],
+    [["weather", "calibrations", "--city", "miami"], "/live_data/weather/miami/calibrations", "array"],
     [["structured-targets"], "/structured_targets", "array"],
     [["structured-targets", "get", "--structured-target-id", "MILESTONE"], "/structured_targets/MILESTONE", "object"],
     [["incentives"], "/incentive_programs", "array"],
@@ -519,7 +642,7 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     [["historical", "trades"], "/historical/trades", "array"]
   ];
   assert.equal(COMMANDS.length, cases.length);
-  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "MILESTONE", "COLLECTION", "Sports"].includes(part)).join(" ")));
+  assert.deepEqual(COMMANDS.map((definition) => definition.name), cases.map(([argv]) => argv.filter((part) => !part.startsWith("--") && !/^\d+$/.test(part) && !["SERIES", "EVENT", "MARKET", "MILESTONE", "COLLECTION", "Sports", "miami"].includes(part)).join(" ")));
   for (const [argv, endpoint, resultType] of cases) {
     const parsed = parseArguments(argv);
     const request = buildRequest(parsed.definition, parsed.values);

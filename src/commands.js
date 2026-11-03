@@ -69,6 +69,19 @@ function validateTimeRange(values) {
   }
 }
 
+function validateWeatherWindow(values) {
+  if (values.last_sec !== undefined) {
+    if (values.from !== undefined || values.to !== undefined) {
+      return "--last-sec cannot be combined with --from or --to.";
+    }
+    return;
+  }
+  if (values.from === undefined || values.to === undefined) {
+    return "Weather history requires --last-sec or paired --from and --to (Unix milliseconds).";
+  }
+  if (values.from > values.to) return "--from must be less than or equal to --to.";
+}
+
 function validateLiveMarketFilters(values) {
   for (const [minimum, maximum, label] of [
     ["min_created_ts", "max_created_ts", "created"],
@@ -150,6 +163,22 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["weather"], "Inspect a city's public Kalshi temperature index.", "/live_data/weather/{city}", "timeseries", [
+    tickerOption("city", "city", "Weather index city ID, for example miami.", {required: true, location: "path", pathName: "city"}),
+    integerOption("from", "from", "Inclusive start in Unix milliseconds; pair with --to.", {min: 0}),
+    integerOption("to", "to", "Inclusive end in Unix milliseconds; pair with --from.", {min: 0}),
+    integerOption("last-sec", "last_sec", "Trailing window in seconds; excludes --from and --to.", {min: 1}),
+    booleanOption("detailed", "detailed", "Include raw per-station quality-control readings.")
+  ], validateWeatherWindow, "array", {
+    outputTooLargeHint: "Use a smaller --last-sec or --from/--to window, or omit --detailed.",
+    helpNotes: ["Supply --last-sec or paired --from/--to to bound history. Published values are Fahrenheit; missing minutes remain gaps. Incomplete points and historical backfills are not canonical settlement values."]
+  }),
+  command(["weather", "calibrations"], "Inspect a city's published weather-index configuration timeline.", "/live_data/weather/{city}/calibrations", "calibrations", [
+    tickerOption("city", "city", "Weather index city ID, for example miami.", {required: true, location: "path", pathName: "city"})
+  ], undefined, "array", {
+    outputTooLargeHint: "Weather calibration timelines have no narrowing options; the complete timeline exceeds the output cap.",
+    helpNotes: ["One public GET returns the complete provider timeline. Station offsets and city references are Celsius; published index temperatures are Fahrenheit. No pagination, polling, or automatic index request."]
+  }),
   command(["structured-targets"], "Discover public structured targets and source identifiers.", "/structured_targets", "structured_targets", [
     stringOption("ids", "ids", "Comma-separated structured target IDs (1-2000).", {csv: true, maxItems: 2000, csvTickers: true, repeatedQuery: true}),
     stringOption("type", "type", "Filter by provider target type."),
