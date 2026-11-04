@@ -10,6 +10,68 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("market metadata update windows map exactly and preserve provider data", async () => {
+  const argv = ["markets", "--min-updated-ts", "0", "--max-updated-ts", "100",
+    "--series-ticker", "SERIES", "--mve-filter", "exclude", "--cursor", "next+/="];
+  const parsed = parseArguments(argv);
+  const request = buildRequest(parsed.definition, parsed.values);
+  assert.deepEqual(request.query, {limit: 10, cursor: "next+/=", series_ticker: "SERIES",
+    min_updated_ts: 0, max_updated_ts: 100, mve_filter: "exclude"});
+  const body = {markets: [{ticker: "Z", last_updated_ts: null, price: "0.1200", future: false},
+    {ticker: "A", last_updated_ts: "unchanged"}], cursor: "more", unknown: null};
+  let calls = 0;
+  const result = await executeRequest(parsed.definition, request, {fetchImpl: async (url, init) => {
+    calls += 1;
+    assert.equal(new URL(url).searchParams.get("max_updated_ts"), "100");
+    assert.equal(init.method, "GET");
+    assert.equal(init.credentials, "omit");
+    return jsonResponse(body);
+  }});
+  assert.equal(calls, 1);
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.data, body);
+});
+
+test("market update upper bounds support standalone and equal windows", async () => {
+  for (const flags of [["--max-updated-ts", "0"],
+    ["--min-updated-ts", "100", "--max-updated-ts", "100"],
+    ["--max-updated-ts", "100", "--mve-filter", "exclude"]]) {
+    const parsed = parseArguments(["markets", ...flags]);
+    assert.equal(buildRequest(parsed.definition, parsed.values).query.max_updated_ts, Number(flags[1]));
+    const result = await invoke(["markets", ...flags], {fetchImpl: async () => jsonResponse({markets: [], cursor: ""})});
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /count: 0/);
+  }
+  const help = await invoke(["markets", "--help"]);
+  assert.match(help.stdout, /--max-updated-ts/);
+  assert.match(help.stdout, /non-trading/);
+});
+
+test("either market update bound enforces the provider compatibility rules", async () => {
+  for (const updateFlag of ["--min-updated-ts", "--max-updated-ts"]) {
+    for (const flags of [["--status", "open"], ["--tickers", "MARKET"],
+      ["--event-ticker", "EVENT"], ["--min-created-ts", "0"], ["--max-close-ts", "100"],
+      ["--min-settled-ts", "0"], ["--mve-filter", "only"], ["--series-ticker", "SERIES"]]) {
+      const result = await invoke(["markets", updateFlag, "100", ...flags], {
+        fetchImpl: async () => assert.fail("invalid filters must not fetch")
+      });
+      assert.equal(result.exitCode, 2, [updateFlag, ...flags].join(" "));
+      assert.equal(result.stdout, "");
+      assert.equal(yamlErrorCode(result.stderr), "invalid_query");
+    }
+  }
+});
+
+test("invalid metadata update windows fail locally", async () => {
+  for (const flags of [["--min-updated-ts", "101", "--max-updated-ts", "100"],
+    ["--max-updated-ts", "-1"], ["--max-updated-ts", "1.5"],
+    ["--max-updated-ts", "9007199254740992"], ["--max-updated-ts", "NaN"]]) {
+    const result = await invoke(["markets", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+});
+
 test("weather calibrations preserve the complete configuration timeline and Celsius offsets", async () => {
   const argv = ["weather", "calibrations", "--city", "miami"];
   const parsed = parseArguments(argv);
