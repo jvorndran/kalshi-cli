@@ -86,7 +86,8 @@ function validateLiveMarketFilters(values) {
   for (const [minimum, maximum, label] of [
     ["min_created_ts", "max_created_ts", "created"],
     ["min_close_ts", "max_close_ts", "close"],
-    ["min_settled_ts", "max_settled_ts", "settled"]
+    ["min_settled_ts", "max_settled_ts", "settled"],
+    ["min_updated_ts", "max_updated_ts", "updated"]
   ]) {
     if (values[minimum] !== undefined && values[maximum] !== undefined && values[minimum] > values[maximum]) {
       return `The minimum ${label} timestamp must be less than or equal to the maximum ${label} timestamp.`;
@@ -97,22 +98,22 @@ function validateLiveMarketFilters(values) {
     ["min_created_ts", "max_created_ts"],
     ["min_close_ts", "max_close_ts"],
     ["min_settled_ts", "max_settled_ts"],
-    ["min_updated_ts"]
+    ["min_updated_ts", "max_updated_ts"]
   ].filter((group) => group.some((key) => values[key] !== undefined));
 
   if (groups.length > 1) return "Use only one market timestamp-filter family per request.";
 
-  if (values.min_updated_ts !== undefined) {
+  if (values.min_updated_ts !== undefined || values.max_updated_ts !== undefined) {
     const incompatible = [
       "event_ticker", "min_created_ts", "max_created_ts", "max_close_ts", "min_close_ts",
       "min_settled_ts", "max_settled_ts", "status", "tickers"
     ].some((key) => values[key] !== undefined);
-    if (incompatible) return "--min-updated-ts cannot be combined with other market filters except --series-ticker and --mve-filter exclude.";
+    if (incompatible) return "--min-updated-ts/--max-updated-ts cannot be combined with other market filters except --series-ticker and --mve-filter exclude.";
     if (values.series_ticker !== undefined && values.mve_filter !== "exclude") {
-      return "Combining --min-updated-ts with --series-ticker requires --mve-filter exclude.";
+      return "Combining --min-updated-ts/--max-updated-ts with --series-ticker requires --mve-filter exclude.";
     }
     if (values.mve_filter !== undefined && values.mve_filter !== "exclude") {
-      return "--min-updated-ts permits only --mve-filter exclude.";
+      return "--min-updated-ts/--max-updated-ts permits only --mve-filter exclude.";
     }
   }
 
@@ -336,7 +337,8 @@ export const COMMANDS = [
     tickerOption("series-ticker", "series_ticker", "Filter by series ticker."),
     integerOption("min-created-ts", "min_created_ts", "Filter markets created after this Unix timestamp.", {min: 0}),
     integerOption("max-created-ts", "max_created_ts", "Filter markets created before this Unix timestamp.", {min: 0}),
-    integerOption("min-updated-ts", "min_updated_ts", "Filter metadata updated after this Unix timestamp.", {min: 0}),
+    integerOption("min-updated-ts", "min_updated_ts", "Filter non-trading metadata updated after this Unix timestamp in seconds.", {min: 0}),
+    integerOption("max-updated-ts", "max_updated_ts", "Filter non-trading metadata updated at or before this Unix timestamp in seconds.", {min: 0}),
     integerOption("min-close-ts", "min_close_ts", "Filter markets closing after this Unix timestamp.", {min: 0}),
     integerOption("max-close-ts", "max_close_ts", "Filter markets closing before this Unix timestamp.", {min: 0}),
     integerOption("min-settled-ts", "min_settled_ts", "Filter markets settled after this Unix timestamp.", {min: 0}),
