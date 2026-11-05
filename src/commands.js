@@ -403,10 +403,43 @@ export function rootHelp(version) {
     "Usage: kalshi <command> [options]",
     "",
     "Commands:",
+    "  describe <command>                 Describe a command as YAML without a request.",
     ...rows,
     "",
     "Run kalshi <command> --help for command options."
   ].join("\n");
+}
+
+export function describeCommand(definition) {
+  return {
+    schema_version: 1,
+    command: definition.name,
+    summary: definition.summary,
+    method: "GET",
+    endpoint: definition.endpoint,
+    result_key: definition.resultKey,
+    result_type: definition.resultType,
+    options: definition.options.map((option) => ({
+      flag: `--${option.flag}`,
+      type: option.type,
+      required: option.required === true,
+      location: option.location ?? "query",
+      parameter: option.pathName ?? option.query,
+      description: option.description,
+      ...(option.defaultValue === undefined ? {} : {default: option.defaultValue}),
+      ...(option.min === undefined ? {} : {minimum: option.min}),
+      ...(option.max === undefined ? {} : {maximum: option.max}),
+      ...(option.enum === undefined ? {} : {choices: option.enum}),
+      ...(option.csv ? {comma_separated: true} : {}),
+      ...(option.maxItems === undefined ? {} : {maximum_items: option.maxItems}),
+      ...(option.repeatedQuery ? {repeated_query: true} : {}),
+      ...(option.ticker ? {ticker: true} : {}),
+      ...(option.maxLength === undefined ? {} : {maximum_length: option.maxLength}),
+      ...(option.ascii ? {printable_ascii: true} : {}),
+      ...(option.csvTickers ? {ticker_items: true} : {}),
+    })),
+    notes: definition.helpNotes ?? [],
+  };
 }
 
 export function commandHelp(definition) {

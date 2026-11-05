@@ -163,6 +163,14 @@ function parseOptions(definition, args) {
 
 export function parseArguments(argv) {
   if (!argv.length || argv[0] === "--help") return {kind: "root_help"};
+  if (argv[0] === "describe") {
+    const path = argv.slice(1);
+    const definition = resolveCommand(path);
+    if (path.length !== definition.path.length) {
+      throw new CliError("unexpected_argument", "describe accepts only a command path, without request options.");
+    }
+    return {kind: "command_description", definition};
+  }
   if (argv[0] === "--version") {
     if (argv.length > 1) throw new CliError("unexpected_argument", "--version does not accept additional arguments.");
     return {kind: "version"};

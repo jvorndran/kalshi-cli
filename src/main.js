@@ -1,6 +1,6 @@
 import {Buffer} from "node:buffer";
 import {parseArguments} from "./args.js";
-import {commandHelp, rootHelp} from "./commands.js";
+import {commandHelp, describeCommand, rootHelp} from "./commands.js";
 import {CliError, errorDocument} from "./errors.js";
 import {executeRequest, RAW_DATA} from "./execute.js";
 import {buildRequest} from "./request.js";
@@ -59,6 +59,10 @@ export async function runCli(argv, options = {}) {
     }
     if (parsed.kind === "command_help") {
       write(stdout, `${commandHelp(parsed.definition)}\n`);
+      return 0;
+    }
+    if (parsed.kind === "command_description") {
+      writeYaml(stdout, describeCommand(parsed.definition));
       return 0;
     }
 
