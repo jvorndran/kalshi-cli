@@ -10,6 +10,52 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("describe exposes command metadata offline without requiring request arguments", async () => {
+  const result = await invoke(["describe", "markets", "candlesticks"], {
+    fetchImpl: async () => assert.fail("description must not fetch")
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /schema_version: 1\n/);
+  assert.match(result.stdout, /command: markets candlesticks\n/);
+  assert.match(result.stdout, /method: GET\n/);
+  assert.match(result.stdout, /endpoint: \/series\/\{series_ticker\}\/markets\/\{ticker\}\/candlesticks\n/);
+  assert.match(result.stdout, /flag: "--period-interval"/);
+  assert.match(result.stdout, /required: true/);
+  assert.match(result.stdout, /choices:\n\s+- 1\n\s+- 60\n\s+- 1440/);
+  assert.match(result.stdout, /location: path/);
+  assert.equal(result.stdout.endsWith("\n\n"), false);
+  assert.equal(result.stdout, (await invoke(["describe", "markets", "candlesticks"])).stdout);
+});
+
+test("describe supports every allowed route and reports list and CSV bounds", async () => {
+  for (const definition of COMMANDS) {
+    const result = await invoke(["describe", ...definition.path], {
+      fetchImpl: async () => assert.fail("description must not fetch")
+    });
+    assert.equal(result.exitCode, 0, definition.name);
+    assert.match(result.stdout, new RegExp(`command: ${definition.name}\\n`));
+  }
+  const list = await invoke(["describe", "markets"]);
+  assert.match(list.stdout, /default: 10/);
+  assert.match(list.stdout, /maximum: 1000/);
+  assert.match(list.stdout, /minimum: 0/);
+  const batch = await invoke(["describe", "milestones", "live", "batch"]);
+  assert.match(batch.stdout, /comma_separated: true/);
+  assert.match(batch.stdout, /maximum_items: 100/);
+  assert.match(batch.stdout, /repeated_query: true/);
+});
+
+test("describe rejects unknown commands, extra path segments and request options", async () => {
+  for (const argv of [["describe"], ["describe", "orders"], ["describe", "markets", "extra"],
+    ["describe", "markets", "--limit", "1"], ["describe", "markets", "--api-key", "unused"]]) {
+    const result = await invoke(argv, {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  assert.match((await invoke(["--help"])).stdout, /describe <command>/);
+});
+
 test("market metadata update windows map exactly and preserve provider data", async () => {
   const argv = ["markets", "--min-updated-ts", "0", "--max-updated-ts", "100",
     "--series-ticker", "SERIES", "--mve-filter", "exclude", "--cursor", "next+/="];
