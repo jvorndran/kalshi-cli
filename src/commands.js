@@ -403,11 +403,21 @@ export function rootHelp(version) {
     "Usage: kalshi <command> [options]",
     "",
     "Commands:",
+    "  commands                           List the installed public commands as YAML.",
     "  describe <command>                 Describe a command as YAML without a request.",
     ...rows,
     "",
     "Run kalshi <command> --help for command options."
   ].join("\n");
+}
+
+export function commandCatalog() {
+  return {
+    schema_version: 1,
+    command: "commands",
+    count: COMMANDS.length,
+    commands: COMMANDS.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
+  };
 }
 
 export function describeCommand(definition) {
