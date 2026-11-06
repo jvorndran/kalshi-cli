@@ -10,6 +10,33 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("commands lists the installed public routes as deterministic YAML without fetching", async () => {
+  const fetchImpl = async () => assert.fail("command catalog must not fetch");
+  const result = await invoke(["commands"], {fetchImpl});
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^schema_version: 1\ncommand: commands\n/);
+  assert.match(result.stdout, new RegExp(`count: ${COMMANDS.length}\\n`));
+  assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name),
+    COMMANDS.map(({name}) => name));
+  assert.match(result.stdout, /endpoint: \/markets\/\{ticker\}\/orderbook\n/);
+  assert.equal((await invoke(["commands"], {fetchImpl})).stdout, result.stdout);
+});
+
+test("commands has offline help and rejects request arguments", async () => {
+  const fetchImpl = async () => assert.fail("command catalog must not fetch");
+  const help = await invoke(["commands", "--help"], {fetchImpl});
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /Usage: kalshi commands/);
+  assert.match((await invoke(["--help"], {fetchImpl})).stdout, /^  commands +List/m);
+  for (const args of [["commands", "markets"], ["commands", "--limit", "1"], ["commands", "--help", "extra"]]) {
+    const result = await invoke(args, {fetchImpl});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /code: unexpected_argument/);
+  }
+});
+
 test("describe exposes command metadata offline without requiring request arguments", async () => {
   const result = await invoke(["describe", "markets", "candlesticks"], {
     fetchImpl: async () => assert.fail("description must not fetch")

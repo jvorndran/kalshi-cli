@@ -163,6 +163,13 @@ function parseOptions(definition, args) {
 
 export function parseArguments(argv) {
   if (!argv.length || argv[0] === "--help") return {kind: "root_help"};
+  if (argv[0] === "commands") {
+    if (argv.length === 2 && argv[1] === "--help") return {kind: "catalog_help"};
+    if (argv.length !== 1) {
+      throw new CliError("unexpected_argument", "commands does not accept arguments or request options.");
+    }
+    return {kind: "command_catalog"};
+  }
   if (argv[0] === "describe") {
     const path = argv.slice(1);
     const definition = resolveCommand(path);

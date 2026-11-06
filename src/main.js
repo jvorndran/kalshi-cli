@@ -1,6 +1,6 @@
 import {Buffer} from "node:buffer";
 import {parseArguments} from "./args.js";
-import {commandHelp, describeCommand, rootHelp} from "./commands.js";
+import {commandCatalog, commandHelp, describeCommand, rootHelp} from "./commands.js";
 import {CliError, errorDocument} from "./errors.js";
 import {executeRequest, RAW_DATA} from "./execute.js";
 import {buildRequest} from "./request.js";
@@ -63,6 +63,14 @@ export async function runCli(argv, options = {}) {
     }
     if (parsed.kind === "command_description") {
       writeYaml(stdout, describeCommand(parsed.definition));
+      return 0;
+    }
+    if (parsed.kind === "catalog_help") {
+      write(stdout, "Usage: kalshi commands\n\nList the installed public GET commands as YAML.\n");
+      return 0;
+    }
+    if (parsed.kind === "command_catalog") {
+      writeYaml(stdout, commandCatalog());
       return 0;
     }
 
