@@ -10,6 +10,81 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("plan validates a public request offline and emits its exact defaulted URL", async () => {
+  const argv = ["plan", "markets", "--event-ticker", "EVENT", "--status", "open"];
+  const options = {fetchImpl: async () => assert.fail("planning must not fetch")};
+  const result = await invoke(argv, options);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout, [
+    "schema_version: 1", "command: plan", "request:", "  command: markets", "  method: GET",
+    "  endpoint: /markets", "  query:", "    limit: 10", "    event_ticker: EVENT", "    status: open",
+    "  source_url: https://external-api.kalshi.com/trade-api/v2/markets?limit=10&event_ticker=EVENT&status=open", ""
+  ].join("\n"));
+  assert.equal((await invoke(argv, options)).stdout, result.stdout);
+  assert.doesNotMatch(result.stdout, /observed_at|requested_at|response_sha256|provider:|data:/);
+});
+
+test("plan resolves paths and repeated query values while preserving explicit false", async () => {
+  const options = {fetchImpl: async () => assert.fail("planning must not fetch")};
+  const path = await invoke(["plan", "markets", "get", "--ticker", "MARKET-A"], options);
+  assert.equal(path.exitCode, 0);
+  assert.equal(yamlScalar(path.stdout, "endpoint", 2), "/markets/MARKET-A");
+  assert.match(path.stdout, /  query: \{\}/);
+  const batch = await invoke(["plan", "milestones", "live", "batch", "--milestone-ids", " A, B ",
+    "--include-player-stats", "false"], options);
+  assert.equal(batch.exitCode, 0);
+  assert.equal(yamlScalar(batch.stdout, "source_url", 2),
+    `${BASE_URL}/live_data/batch?milestone_ids=A&milestone_ids=B&include_player_stats=false`);
+  assert.match(batch.stdout, /milestone_ids:\n      - A\n      - B/);
+  assert.match(batch.stdout, /include_player_stats: false/);
+});
+
+test("plan applies the same local validation and atomic error streams as execution", async () => {
+  const invalid = [
+    ["markets", "get"], ["series"], ["weather", "--city", "miami"],
+    ["markets", "--min-updated-ts", "20", "--max-updated-ts", "10"],
+    ["markets", "--min-updated-ts", "1", "--status", "open"],
+    ["markets", "--limit", "1001"], ["markets", "--limit", "1", "--limit", "2"],
+    ["markets", "--url", "https://example.com"], ["markets", "--api-key", "unused"],
+    ["markets", "get", "--ticker", "../bad"], ["orders"], ["commands"], ["plan", "markets"]
+  ];
+  const options = {fetchImpl: async () => assert.fail("invalid input must not fetch")};
+  for (const argv of invalid) {
+    const planned = await invoke(["plan", ...argv], options);
+    assert.equal(planned.exitCode, 2, argv.join(" "));
+    assert.equal(planned.stdout, "");
+    if (!["commands", "plan"].includes(argv[0])) {
+      assert.equal(planned.stderr, (await invoke(argv, options)).stderr);
+    }
+  }
+});
+
+test("plan provides offline usage and command help without requesting required values", async () => {
+  const options = {fetchImpl: async () => assert.fail("help must not fetch")};
+  for (const argv of [["plan"], ["plan", "--help"]]) {
+    const result = await invoke(argv, options);
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stderr, "");
+    assert.match(result.stdout, /Usage: kalshi plan <command> \[options\]/);
+  }
+  const help = await invoke(["plan", "markets", "get", "--help"], options);
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /Usage: kalshi plan markets get \[options\]/);
+  assert.match(help.stdout, /--ticker/);
+  assert.match((await invoke(["--help"], options)).stdout, /plan <command>/);
+  assert.equal((await invoke(["plan", "--help", "extra"], options)).exitCode, 2);
+});
+
+test("plan enforces the formatted output cap before writing stdout", async () => {
+  const result = await invoke(["plan", "incentives", "--incentive-description", "x".repeat(MAX_OUTPUT_BYTES)], {
+    fetchImpl: async () => assert.fail("planning must not fetch")
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(yamlErrorCode(result.stderr), "output_too_large");
+});
+
 test("commands lists the installed public routes as deterministic YAML without fetching", async () => {
   const fetchImpl = async () => assert.fail("command catalog must not fetch");
   const result = await invoke(["commands"], {fetchImpl});
@@ -735,7 +810,7 @@ test("root help is offline and lists the public command surface", async () => {
   assert.equal(calls, 0);
 });
 
-test("all commands resolve to the fixed endpoint and response contract", () => {
+test("all commands resolve to the fixed endpoint and response contract", async () => {
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
@@ -784,6 +859,11 @@ test("all commands resolve to the fixed endpoint and response contract", () => {
     assert.equal(request.endpoint, endpoint, parsed.definition.name);
     assert.equal(parsed.definition.resultType, resultType, parsed.definition.name);
     assert.ok(request.url.startsWith(BASE_URL));
+    const plan = await invoke(["plan", ...argv], {fetchImpl: async () => assert.fail("planning must not fetch")});
+    assert.equal(plan.exitCode, 0, parsed.definition.name);
+    assert.equal(yamlScalar(plan.stdout, "command", 2), parsed.definition.name);
+    assert.equal(yamlScalar(plan.stdout, "endpoint", 2), endpoint);
+    assert.equal(yamlScalar(plan.stdout, "source_url", 2), request.url);
   }
 });
 

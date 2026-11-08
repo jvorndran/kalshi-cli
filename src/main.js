@@ -58,7 +58,11 @@ export async function runCli(argv, options = {}) {
       return 0;
     }
     if (parsed.kind === "command_help") {
-      write(stdout, `${commandHelp(parsed.definition)}\n`);
+      write(stdout, `${commandHelp(parsed.definition, parsed.planning)}\n`);
+      return 0;
+    }
+    if (parsed.kind === "plan_help") {
+      write(stdout, "Usage: kalshi plan <command> [options]\n\nValidate and preview a public GET request as YAML without fetching it.\nUse the same command path and options as execution; all local validation applies.\nRun kalshi plan <command> --help for options.\n");
       return 0;
     }
     if (parsed.kind === "command_description") {
@@ -75,6 +79,20 @@ export async function runCli(argv, options = {}) {
     }
 
     const request = buildRequest(parsed.definition, parsed.values);
+    if (parsed.kind === "request_plan") {
+      writeResultYaml(stdout, {
+        schema_version: 1,
+        command: "plan",
+        request: {
+          command: parsed.definition.name,
+          method: "GET",
+          endpoint: request.endpoint,
+          query: request.query,
+          source_url: request.url
+        }
+      }, parsed.definition);
+      return 0;
+    }
     const result = await executeRequest(parsed.definition, request, options);
     try {
       writeResultYaml(stdout, result, parsed.definition);
