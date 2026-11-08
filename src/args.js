@@ -163,6 +163,9 @@ function parseOptions(definition, args) {
 
 export function parseArguments(argv) {
   if (!argv.length || argv[0] === "--help") return {kind: "root_help"};
+  if (argv[0] === "plan" && (argv.length === 1 || (argv.length === 2 && argv[1] === "--help"))) {
+    return {kind: "plan_help"};
+  }
   if (argv[0] === "commands") {
     if (argv.length === 2 && argv[1] === "--help") return {kind: "catalog_help"};
     if (argv.length !== 1) {
@@ -183,7 +186,9 @@ export function parseArguments(argv) {
     return {kind: "version"};
   }
 
-  const definition = resolveCommand(argv);
-  const {values, help} = parseOptions(definition, argv.slice(definition.path.length));
-  return {kind: help ? "command_help" : "request", definition, values};
+  const planning = argv[0] === "plan";
+  const requestArgs = planning ? argv.slice(1) : argv;
+  const definition = resolveCommand(requestArgs);
+  const {values, help} = parseOptions(definition, requestArgs.slice(definition.path.length));
+  return {kind: help ? "command_help" : planning ? "request_plan" : "request", definition, values, planning};
 }

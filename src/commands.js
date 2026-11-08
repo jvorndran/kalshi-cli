@@ -405,6 +405,7 @@ export function rootHelp(version) {
     "Commands:",
     "  commands                           List the installed public commands as YAML.",
     "  describe <command>                 Describe a command as YAML without a request.",
+    "  plan <command> [options]           Validate and preview a request without fetching.",
     ...rows,
     "",
     "Run kalshi <command> --help for command options."
@@ -452,7 +453,7 @@ export function describeCommand(definition) {
   };
 }
 
-export function commandHelp(definition) {
+export function commandHelp(definition, planning = false) {
   const rows = definition.options.map((option) => {
     const value = option.type === "boolean" ? "" : ` <${option.type === "integer" ? "integer" : "value"}>`;
     const required = option.required ? " Required." : "";
@@ -461,7 +462,7 @@ export function commandHelp(definition) {
   return [
     definition.summary,
     "",
-    `Usage: kalshi ${definition.name}${definition.options.length ? " [options]" : ""}`,
+    `Usage: kalshi ${planning ? "plan " : ""}${definition.name}${definition.options.length ? " [options]" : ""}`,
     ...(rows.length ? ["", "Options:", ...rows] : []),
     ...(definition.helpNotes?.length ? ["", "Notes:", ...definition.helpNotes.map((note) => `  ${note}`)] : []),
     "",
