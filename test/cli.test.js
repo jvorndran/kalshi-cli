@@ -108,8 +108,71 @@ test("commands has offline help and rejects request arguments", async () => {
     const result = await invoke(args, {fetchImpl});
     assert.equal(result.exitCode, 2);
     assert.equal(result.stdout, "");
-    assert.match(result.stderr, /code: unexpected_argument/);
+    assert.equal(yamlErrorCode(result.stderr), args[1] === "--limit" ? "unknown_option" : "unexpected_argument");
   }
+});
+
+test("commands filters an exact root group and composes a case-insensitive search", async () => {
+  const options = {fetchImpl: async () => assert.fail("catalog filtering must not fetch")};
+  const group = await invoke(["commands", "--group", "historical"], options);
+  assert.equal(group.exitCode, 0);
+  assert.equal(group.stderr, "");
+  assert.deepEqual(Array.from(group.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name),
+    ["historical cutoff", "historical markets", "historical markets get", "historical markets candlesticks", "historical trades"]);
+  assert.match(group.stdout, /filters:\n  group: historical\ncount: 5\n/);
+  const combined = await invoke(["commands", "--search= CANDLESTICKS ", "--group=historical"], options);
+  assert.equal(combined.exitCode, 0);
+  assert.equal(combined.stderr, "");
+  assert.match(combined.stdout, /filters:\n  group: historical\n  search: CANDLESTICKS\ncount: 1\n/);
+  assert.deepEqual(Array.from(combined.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name),
+    ["historical markets candlesticks"]);
+  assert.equal((await invoke(["commands", "--group", "historical", "--search", "CANDLESTICKS"], options)).stdout, combined.stdout);
+});
+
+test("commands searches names, summaries and endpoint templates as literal text", async () => {
+  const options = {fetchImpl: async () => assert.fail("catalog search must not fetch")};
+  for (const [query, expected] of [
+    ["ORDERBOOK", ["markets orderbook", "markets orderbooks"]],
+    ["archived", ["historical markets", "historical markets get", "historical markets candlesticks", "historical trades"]],
+    ["/live_data/weather", ["weather", "weather calibrations"]]
+  ]) {
+    const result = await invoke(["commands", "--search", query], options);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.equal(result.stderr, "");
+    assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name), expected);
+    assert.match(result.stdout, new RegExp(`count: ${expected.length}\\n`));
+  }
+  const empty = await invoke(["commands", "--group", "historical", "--search", ".*"], options);
+  assert.equal(empty.exitCode, 0);
+  assert.equal(empty.stderr, "");
+  assert.equal(empty.stdout, "schema_version: 1\ncommand: commands\nfilters:\n  group: historical\n  search: .*\ncount: 0\ncommands: []\n");
+});
+
+test("commands rejects malformed local filters atomically without fetching", async () => {
+  const options = {fetchImpl: async () => assert.fail("invalid catalog input must not fetch")};
+  for (const [args, code] of [
+    [["--group", "orders"], "invalid_argument"],
+    [["--group", "markets get"], "invalid_argument"],
+    [["--search", "   "], "invalid_argument"],
+    [["--search", "a\nb"], "invalid_argument"],
+    [["--search", "x".repeat(201)], "invalid_argument"],
+    [["--search"], "missing_option_value"],
+    [["--group"], "missing_option_value"],
+    [["--search=a", "--search=b"], "duplicate_option"],
+    [["--group", "markets", "--group", "historical"], "duplicate_option"],
+    [["--limit", "1"], "unknown_option"],
+    [["--no-search"], "invalid_argument"],
+    [["markets"], "unexpected_argument"]
+  ]) {
+    const result = await invoke(["commands", ...args], options);
+    assert.equal(result.exitCode, 2, args.join(" "));
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), code);
+  }
+  const help = await invoke(["commands", "--help"], options);
+  assert.match(help.stdout, /--group <value>/);
+  assert.match(help.stdout, /--group <value>.*historical/);
+  assert.match(help.stdout, /--search <value>/);
 });
 
 test("describe exposes command metadata offline without requiring request arguments", async () => {

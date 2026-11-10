@@ -1,4 +1,4 @@
-import {COMMANDS} from "./commands.js";
+import {CATALOG_DEFINITION, COMMANDS} from "./commands.js";
 import {CliError} from "./errors.js";
 
 const TICKER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
@@ -167,11 +167,8 @@ export function parseArguments(argv) {
     return {kind: "plan_help"};
   }
   if (argv[0] === "commands") {
-    if (argv.length === 2 && argv[1] === "--help") return {kind: "catalog_help"};
-    if (argv.length !== 1) {
-      throw new CliError("unexpected_argument", "commands does not accept arguments or request options.");
-    }
-    return {kind: "command_catalog"};
+    const {values, help} = parseOptions(CATALOG_DEFINITION, argv.slice(1));
+    return {kind: help ? "catalog_help" : "command_catalog", values};
   }
   if (argv[0] === "describe") {
     const path = argv.slice(1);
