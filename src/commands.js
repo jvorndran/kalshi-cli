@@ -392,6 +392,19 @@ export const COMMANDS = [
   command(["historical", "trades"], "List archived public trades.", "/historical/trades", "trades", tradeOptions(), validateTimeRange)
 ];
 
+const commandGroups = [...new Set(COMMANDS.map(({path}) => path[0]))];
+
+export const CATALOG_DEFINITION = {
+  name: "commands",
+  summary: "List or filter the installed public GET commands as YAML without a request.",
+  options: [
+    stringOption("group", "group", `Keep one exact top-level command group: ${commandGroups.join(", ")}.`, {
+      enum: commandGroups
+    }),
+    stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200})
+  ]
+};
+
 export function rootHelp(version) {
   const rows = COMMANDS.map((definition) => `  ${definition.name.padEnd(34)} ${definition.summary}`);
   return [
@@ -403,7 +416,7 @@ export function rootHelp(version) {
     "Usage: kalshi <command> [options]",
     "",
     "Commands:",
-    "  commands                           List the installed public commands as YAML.",
+    "  commands                           List or filter the installed public commands as YAML.",
     "  describe <command>                 Describe a command as YAML without a request.",
     "  plan <command> [options]           Validate and preview a request without fetching.",
     ...rows,
@@ -412,12 +425,21 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog() {
+export function commandCatalog({group, search} = {}) {
+  const needle = search?.toLowerCase();
+  const definitions = COMMANDS.filter(({path, name, summary, endpoint}) =>
+    (group === undefined || path[0] === group) &&
+    (needle === undefined || [name, summary, endpoint].some((value) => value.toLowerCase().includes(needle)))
+  );
   return {
     schema_version: 1,
     command: "commands",
-    count: COMMANDS.length,
-    commands: COMMANDS.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
+    ...(group === undefined && search === undefined ? {} : {filters: {
+      ...(group === undefined ? {} : {group}),
+      ...(search === undefined ? {} : {search})
+    }}),
+    count: definitions.length,
+    commands: definitions.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
   };
 }
 
