@@ -10,6 +10,44 @@ import {buildRequest, BASE_URL} from "../src/request.js";
 import {VERSION} from "../src/version.js";
 import {parseLosslessJson, renderYamlDocument} from "../src/yaml.js";
 
+test("catalog discovers public commands by an exact supported option offline", async () => {
+  const options = {fetchImpl: async () => assert.fail("catalog must not fetch")};
+  for (const flag of [...new Set(COMMANDS.flatMap(({options}) => options.map(({flag}) => flag)))]) {
+    const result = await invoke(["commands", "--option", flag], options);
+    assert.equal(result.exitCode, 0, flag);
+    assert.equal(result.stderr, "");
+    const expected = COMMANDS.filter(({options}) => options.some((option) => option.flag === flag));
+    assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name),
+      expected.map(({name}) => name));
+    assert.match(result.stdout, new RegExp(`count: ${expected.length}\\n`));
+    assert.match(result.stdout, new RegExp(`  option: ${flag}\\n`));
+  }
+});
+
+test("catalog option discovery composes with group and literal search", async () => {
+  const options = {fetchImpl: async () => assert.fail("catalog must not fetch")};
+  const result = await invoke(["commands", "--group", "historical", "--search", " CANDLESTICKS ", "--option= period-interval "], options);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /filters:\n  group: historical\n  search: CANDLESTICKS\n  option: period-interval\n/);
+  assert.match(result.stdout, /count: 1\ncommands:\n  - command: historical markets candlesticks\n/);
+  const empty = await invoke(["commands", "--group", "exchange", "--option", "cursor"], options);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  assert.match((await invoke(["commands", "--help"], options)).stdout, /--option <value>/);
+});
+
+test("catalog rejects malformed or unknown option names before fetching", async () => {
+  for (const flags of [["--option"], ["--option", " "], ["--option", "Ticker"],
+    ["--option", "api-key"], ["--option", "--ticker"], ["--option", "tick"],
+    ["--option", "ticker", "--option", "cursor"]]) {
+    const result = await invoke(["commands", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.notEqual(result.stderr, "");
+  }
+});
+
 test("plan validates a public request offline and emits its exact defaulted URL", async () => {
   const argv = ["plan", "markets", "--event-ticker", "EVENT", "--status", "open"];
   const options = {fetchImpl: async () => assert.fail("planning must not fetch")};
