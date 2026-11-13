@@ -402,6 +402,9 @@ export const CATALOG_DEFINITION = {
       enum: commandGroups
     }),
     stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200}),
+    stringOption("pagination", "pagination", "Keep commands with cursor pagination (cursor) or without a cursor option (none).", {
+      enum: ["cursor", "none"]
+    }),
     stringOption("option", "option", "Keep commands supporting this exact bare option name, such as ticker or cursor.", {
       enum: [...new Set(COMMANDS.flatMap(({options}) => options.map(({flag}) => flag)))]
     })
@@ -428,20 +431,22 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option} = {}) {
+export function commandCatalog({group, search, option, pagination} = {}) {
   const needle = search?.toLowerCase();
   const definitions = COMMANDS.filter(({path, name, summary, endpoint, options}) =>
     (group === undefined || path[0] === group) &&
     (needle === undefined || [name, summary, endpoint].some((value) => value.toLowerCase().includes(needle))) &&
-    (option === undefined || options.some(({flag}) => flag === option))
+    (option === undefined || options.some(({flag}) => flag === option)) &&
+    (pagination === undefined || options.some(({flag}) => flag === "cursor") === (pagination === "cursor"))
   );
   return {
     schema_version: 1,
     command: "commands",
-    ...(group === undefined && search === undefined && option === undefined ? {} : {filters: {
+    ...(group === undefined && search === undefined && option === undefined && pagination === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
-      ...(option === undefined ? {} : {option})
+      ...(option === undefined ? {} : {option}),
+      ...(pagination === undefined ? {} : {pagination})
     }}),
     count: definitions.length,
     commands: definitions.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),

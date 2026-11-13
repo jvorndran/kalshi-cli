@@ -1807,3 +1807,42 @@ test("event metadata accepts empty image strings and rejects a missing or invali
     assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
   }
 });
+
+test("catalog pagination discovery partitions installed commands offline", async () => {
+  const options = {fetchImpl: async () => assert.fail("must not fetch")};
+  for (const pagination of ["cursor", "none"]) {
+    const result = await invoke(["commands", "--pagination", pagination], options);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const expected = COMMANDS.filter(({options}) =>
+      options.some(({flag}) => flag === "cursor") === (pagination === "cursor"));
+    assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name),
+      expected.map(({name}) => name));
+    assert.match(result.stdout, new RegExp(`count: ${expected.length}\\n`));
+    assert.match(result.stdout, new RegExp(`  pagination: ${pagination}\\n`));
+    assert.equal(result.stderr, "");
+  }
+});
+
+test("catalog pagination composes with group search and option filters", async () => {
+  const options = {fetchImpl: async () => assert.fail("must not fetch")};
+  const result = await invoke(["commands", "--group", "historical", "--search", "trades",
+    "--option", "ticker", "--pagination= cursor "], options);
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /count: 1\ncommands:\n  - command: historical trades\n/);
+  assert.match(result.stdout, /  pagination: cursor\n/);
+  const empty = await invoke(["commands", "--option", "cursor", "--pagination", "none"], options);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  const help = await invoke(["commands", "--help"], options);
+  assert.match(help.stdout, /--pagination <value>.*cursor.*none/);
+});
+
+test("catalog pagination rejects malformed filters locally", async () => {
+  for (const flags of [["--pagination"], ["--pagination", " "], ["--pagination", "offset"],
+    ["--pagination", "Cursor"], ["--pagination", "cursor", "--pagination", "none"]]) {
+    const result = await invoke(["commands", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.notEqual(result.stderr, "");
+  }
+});
