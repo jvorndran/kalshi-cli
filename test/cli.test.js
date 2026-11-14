@@ -1846,3 +1846,40 @@ test("catalog pagination rejects malformed filters locally", async () => {
     assert.notEqual(result.stderr, "");
   }
 });
+
+
+test("catalog result types partition installed public routes offline", async () => {
+  for (const type of [...new Set(COMMANDS.map(({resultType}) => resultType))]) {
+    const result = await invoke(["commands", "--result-type", type], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 0, result.stderr);
+    const expected = COMMANDS.filter(({resultType}) => resultType === type);
+    assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name), expected.map(({name}) => name));
+    assert.match(result.stdout, new RegExp(`count: ${expected.length}\\n`));
+    assert.match(result.stdout, new RegExp(`  result_type: ${type}\\n`));
+    assert.equal(result.stderr, "");
+  }
+});
+
+test("catalog result type composes with every existing discovery filter", async () => {
+  const noFetch = {fetchImpl: async () => assert.fail("must not fetch")};
+  const result = await invoke(["commands", "--group", "markets", "--search", "orderbook",
+    "--option", "ticker", "--pagination", "none", "--result-type= object "], noFetch);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(result.stdout, /count: 1\ncommands:\n  - command: markets orderbook\n/);
+  assert.match(result.stdout, /  result_type: object\n/);
+  const empty = await invoke(["commands", "--pagination", "cursor", "--result-type", "object"], noFetch);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  const help = await invoke(["commands", "--help"], noFetch);
+  assert.match(help.stdout, /--result-type <value>.*array.*object.*string/);
+});
+
+test("catalog result type rejects malformed values without fetching", async () => {
+  for (const flags of [["--result-type"], ["--result-type", " "], ["--result-type", "Object"],
+    ["--result-type", "unknown"], ["--result-type", "array", "--result-type", "object"]]) {
+    const result = await invoke(["commands", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+    assert.notEqual(result.stderr, "");
+  }
+});

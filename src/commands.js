@@ -402,6 +402,9 @@ export const CATALOG_DEFINITION = {
       enum: commandGroups
     }),
     stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200}),
+    stringOption("result-type", "result_type", "Keep commands by their primary result type: array, object, string.", {
+      enum: [...new Set(COMMANDS.map(({resultType}) => resultType))]
+    }),
     stringOption("pagination", "pagination", "Keep commands with cursor pagination (cursor) or without a cursor option (none).", {
       enum: ["cursor", "none"]
     }),
@@ -431,9 +434,10 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option, pagination} = {}) {
+export function commandCatalog({group, search, option, pagination, result_type} = {}) {
   const needle = search?.toLowerCase();
-  const definitions = COMMANDS.filter(({path, name, summary, endpoint, options}) =>
+  const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType}) =>
+    (result_type === undefined || resultType === result_type) &&
     (group === undefined || path[0] === group) &&
     (needle === undefined || [name, summary, endpoint].some((value) => value.toLowerCase().includes(needle))) &&
     (option === undefined || options.some(({flag}) => flag === option)) &&
@@ -442,11 +446,12 @@ export function commandCatalog({group, search, option, pagination} = {}) {
   return {
     schema_version: 1,
     command: "commands",
-    ...(group === undefined && search === undefined && option === undefined && pagination === undefined ? {} : {filters: {
+    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
       ...(option === undefined ? {} : {option}),
-      ...(pagination === undefined ? {} : {pagination})
+      ...(pagination === undefined ? {} : {pagination}),
+      ...(result_type === undefined ? {} : {result_type})
     }}),
     count: definitions.length,
     commands: definitions.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
