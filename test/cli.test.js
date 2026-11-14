@@ -1871,7 +1871,7 @@ test("catalog result type composes with every existing discovery filter", async 
   assert.equal(empty.exitCode, 0);
   assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
   const help = await invoke(["commands", "--help"], noFetch);
-  assert.match(help.stdout, /--result-type <value>.*array.*object.*string/);
+  assert.match(help.stdout, /--result-type <value>.*array.*object.*string.*boolean/);
 });
 
 test("catalog result type rejects malformed values without fetching", async () => {
@@ -1882,4 +1882,15 @@ test("catalog result type rejects malformed values without fetching", async () =
     assert.equal(result.stdout, "");
     assert.notEqual(result.stderr, "");
   }
+});
+
+
+test("catalog boolean results discover exchange availability and document the type", async () => {
+  const options = {fetchImpl: async () => assert.fail("must not fetch")};
+  const result = await invoke(["commands", "--result-type", "boolean"], options);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(result.stdout, /count: 1\ncommands:\n  - command: exchange status\n/);
+  assert.match(result.stdout, /  result_type: boolean\n/);
+  const help = await invoke(["commands", "--help"], options);
+  assert.match(help.stdout, /--result-type <value>.*boolean/);
 });

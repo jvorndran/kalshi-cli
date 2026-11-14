@@ -402,7 +402,7 @@ export const CATALOG_DEFINITION = {
       enum: commandGroups
     }),
     stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200}),
-    stringOption("result-type", "result_type", "Keep commands by their primary result type: array, object, string.", {
+    stringOption("result-type", "result_type", "Keep commands by their primary result type: array, object, string, boolean.", {
       enum: [...new Set(COMMANDS.map(({resultType}) => resultType))]
     }),
     stringOption("pagination", "pagination", "Keep commands with cursor pagination (cursor) or without a cursor option (none).", {

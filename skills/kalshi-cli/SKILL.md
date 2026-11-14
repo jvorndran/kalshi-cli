@@ -81,4 +81,4 @@ Use `kalshi commands --option cursor` to find commands with that exact supported
 
 Use `kalshi commands --pagination cursor` to discover commands that accept a caller-supplied cursor, or `--pagination none` for commands without a cursor option. This describes the installed CLI's options, not whether a provider response is complete. The filter works offline, combines with group, search, and option filters, and records its value in `filters.pagination`. It preserves catalog order and row fields; it does not fetch or follow pages. Other values fail locally.
 
-Use `commands --result-type array|object|string` to discover primary result shapes offline; combine with the other catalog filters. See the command contract for scope and validation.
+Use `commands --result-type array|object|string|boolean` to discover primary result shapes offline; combine with the other catalog filters. See the command contract for scope and validation.
