@@ -66,7 +66,7 @@ test("packed artifact installs offline and exposes the kalshi executable", {time
     assert.match(plan.stdout, /^schema_version: 1\ncommand: plan\nrequest:/);
     assert.match(plan.stdout, /source_url: https:\/\/external-api\.kalshi\.com\/trade-api\/v2\/markets\?/);
 
-    const catalog = await run(executable, ["commands", "--group", "historical", "--search", "candlesticks", "--option", "period-interval"], {cwd: installRoot});
+    const catalog = await run(executable, ["commands", "--group", "historical", "--search", "candlesticks", "--option", "period-interval", "--result-type", "array"], {cwd: installRoot});
     assert.equal(catalog.code, 0, catalog.stderr);
     assert.equal(catalog.stderr, "");
     assert.match(catalog.stdout, /count: 1\ncommands:\n  - command: historical markets candlesticks\n/);
