@@ -1894,3 +1894,43 @@ test("catalog boolean results discover exchange availability and document the ty
   const help = await invoke(["commands", "--help"], options);
   assert.match(help.stdout, /--result-type <value>.*boolean/);
 });
+
+
+test("catalog discovers explicitly required options without fetching", async () => {
+  const noFetch = {fetchImpl: async () => assert.fail("must not fetch")};
+  for (const flag of [...new Set(COMMANDS.flatMap(({options}) => options.filter(({required}) => required).map(({flag}) => flag)))]) {
+    const result = await invoke(["commands", "--required-option", flag], noFetch);
+    assert.equal(result.exitCode, 0, flag);
+    assert.equal(result.stderr, "");
+    const expected = COMMANDS.filter(({options}) => options.some((opt) => opt.flag === flag && opt.required));
+    assert.deepEqual(Array.from(result.stdout.matchAll(/^  - command: (.+)$/gm), ([, name]) => name), expected.map(({name}) => name));
+    assert.match(result.stdout, new RegExp(`count: ${expected.length}\\n`));
+    assert.match(result.stdout, new RegExp(`  required_option: ${flag}\\n`));
+  }
+  const help = await invoke(["commands", "--help"], noFetch);
+  assert.match(help.stdout, /--required-option <value>.*explicitly required/);
+});
+
+test("required option discovery composes with all catalog filters", async () => {
+  const noFetch = {fetchImpl: async () => assert.fail("must not fetch")};
+  const result = await invoke(["commands", "--group", "historical", "--search", "candlesticks",
+    "--option", "period-interval", "--pagination", "none", "--result-type", "array",
+    "--required-option= ticker "], noFetch);
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /count: 1\ncommands:\n  - command: historical markets candlesticks\n/);
+  assert.match(result.stdout, /  required_option: ticker\n/);
+  const empty = await invoke(["commands", "--group", "exchange", "--required-option", "ticker"], noFetch);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+});
+
+test("required option discovery rejects unsupported and malformed names locally", async () => {
+  for (const flags of [["--required-option"], ["--required-option", " "], ["--required-option", "Ticker"],
+    ["--required-option", "cursor"], ["--required-option", "--ticker"],
+    ["--required-option", "ticker", "--required-option", "ticker"]]) {
+    const result = await invoke(["commands", ...flags], {fetchImpl: async () => assert.fail("must not fetch")});
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^error:/);
+  }
+});
