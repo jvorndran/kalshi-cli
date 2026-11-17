@@ -916,6 +916,7 @@ test("all commands resolve to the fixed endpoint and response contract", async (
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
     [["weather", "--city", "miami", "--last-sec", "60"], "/live_data/weather/miami", "array"],
+    [["weather", "availability"], "/weather_point_markets/availability", "boolean"],
     [["weather", "calibrations", "--city", "miami"], "/live_data/weather/miami/calibrations", "array"],
     [["structured-targets"], "/structured_targets", "array"],
     [["structured-targets", "get", "--structured-target-id", "MILESTONE"], "/structured_targets/MILESTONE", "object"],
@@ -1885,11 +1886,12 @@ test("catalog result type rejects malformed values without fetching", async () =
 });
 
 
-test("catalog boolean results discover exchange availability and document the type", async () => {
+test("catalog boolean results discover exchange and weather availability and document the type", async () => {
   const options = {fetchImpl: async () => assert.fail("must not fetch")};
   const result = await invoke(["commands", "--result-type", "boolean"], options);
   assert.equal(result.exitCode, 0, result.stderr);
-  assert.match(result.stdout, /count: 1\ncommands:\n  - command: exchange status\n/);
+  assert.match(result.stdout, /count: 2\ncommands:\n  - command: exchange status\n/);
+  assert.match(result.stdout, /  - command: weather availability\n/);
   assert.match(result.stdout, /  result_type: boolean\n/);
   const help = await invoke(["commands", "--help"], options);
   assert.match(help.stdout, /--result-type <value>.*boolean/);
@@ -1933,4 +1935,77 @@ test("required option discovery rejects unsupported and malformed names locally"
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /^error:/);
   }
+});
+
+
+test("weather availability uses one public GET and preserves provider domains and variables", async () => {
+  const body = {enabled: false, domains: [{name: "CONUS", bounds: [0, 1.23456789]}],
+    variables: [{variable: "precip", domains: []}], future: null};
+  let calls = 0;
+  const parsed = parseArguments(["weather", "availability"]);
+  const result = await executeRequest(parsed.definition, buildRequest(parsed.definition, parsed.values), {
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/weather_point_markets/availability`);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.query, {});
+  assert.deepEqual(result.data, body);
+  const help = await invoke(["weather", "availability", "--help"]);
+  assert.match(help.stdout, /Existing markets are unaffected/);
+  assert.match(help.stdout, /open water/);
+});
+
+test("weather availability works in offline plans and rejects unsupported filters", async () => {
+  const options = {fetchImpl: async () => assert.fail("must not fetch")};
+  for (const flags of [["--limit", "1"], ["--cursor", "next"], ["--city", "miami"],
+    ["--latitude", "25"], ["--variable", "precip"], ["--all"], ["--api-key", "unused"]]) {
+    const result = await invoke(["weather", "availability", ...flags], options);
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, "");
+  }
+  const plan = await invoke(["plan", "weather", "availability"], options);
+  assert.equal(plan.exitCode, 0);
+  assert.match(plan.stdout, /endpoint: \/weather_point_markets\/availability/);
+  const description = await invoke(["describe", "weather", "availability"], options);
+  assert.equal(description.exitCode, 0);
+  assert.match(description.stdout, /result_key: enabled/);
+  assert.match(description.stdout, /result_type: boolean/);
+});
+
+test("weather availability preserves false and empty lists and fails atomically", async () => {
+  const valid = await invoke(["weather", "availability"], {
+    fetchImpl: async () => jsonResponse({enabled: false, domains: [], variables: []})
+  });
+  assert.equal(valid.exitCode, 0);
+  assert.match(valid.stdout, /count: 1/);
+  assert.match(valid.stdout, /data:\n  enabled: false/);
+  for (const body of [{}, {enabled: null}, {enabled: "true"}]) {
+    const result = await invoke(["weather", "availability"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(yamlErrorCode(result.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(["weather", "availability"], {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({message: "Service unavailable"}, {status: 500});
+  }});
+  assert.equal(calls, 1);
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  const large = await invoke(["weather", "availability"], {
+    fetchImpl: async () => jsonResponse({enabled: true, future: "x".repeat(MAX_OUTPUT_BYTES)})
+  });
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /Weather availability has no narrowing options/);
+  assert.doesNotMatch(large.stderr, /smaller --limit/);
 });

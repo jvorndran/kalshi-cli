@@ -174,6 +174,14 @@ export const COMMANDS = [
     outputTooLargeHint: "Use a smaller --last-sec or --from/--to window, or omit --detailed.",
     helpNotes: ["Supply --last-sec or paired --from/--to to bound history. Published values are Fahrenheit; missing minutes remain gaps. Incomplete points and historical backfills are not canonical settlement values."]
   }),
+  command(["weather", "availability"], "Inspect public weather point market availability and offered domains.", "/weather_point_markets/availability", "enabled", [], undefined, "boolean", {
+    outputTooLargeHint: "Weather availability has no narrowing options; retry later if the provider response grows beyond the output limit.",
+    helpNotes: [
+      "Reports enabled, NOAA MRMS domains and the variables offered in each domain. No location query or market creation is supported.",
+      "Existing markets are unaffected. A location in an offered domain may still be refused over open water.",
+      "Keep provider bounds and variable names unchanged; this metadata does not establish a contract's availability or resolution rules."
+    ]
+  }),
   command(["weather", "calibrations"], "Inspect a city's published weather-index configuration timeline.", "/live_data/weather/{city}/calibrations", "calibrations", [
     tickerOption("city", "city", "Weather index city ID, for example miami.", {required: true, location: "path", pathName: "city"})
   ], undefined, "array", {
