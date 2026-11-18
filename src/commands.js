@@ -82,6 +82,21 @@ function validateWeatherWindow(values) {
   if (values.from > values.to) return "--from must be less than or equal to --to.";
 }
 
+function validateConcertDates(values) {
+  for (const key of ["date_from", "date_to"]) {
+    const value = values[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value) {
+      return `--${key.replaceAll("_", "-")} must be a valid YYYY-MM-DD date.`;
+    }
+  }
+  if (values.date_from !== undefined && values.date_to !== undefined && values.date_from > values.date_to) {
+    return "--date-from must be less than or equal to --date-to.";
+  }
+}
+
 function validateLiveMarketFilters(values) {
   for (const [minimum, maximum, label] of [
     ["min_created_ts", "max_created_ts", "created"],
@@ -164,6 +179,17 @@ const command = (path, summary, endpoint, resultKey, options = [], validate, res
 export const COMMANDS = [
   command(["exchange", "status"], "Get public exchange and trading availability.", "/exchange/status", "exchange_active", [], undefined, "boolean"),
   command(["exchange", "schedule"], "Get public trading hours and maintenance windows.", "/exchange/schedule", "schedule", [], undefined, "object"),
+  command(["concerts", "availability"], "Inspect public concert market availability, covers, and metro show counts.", "/concert_cancellation_markets/availability", "metros", [
+    stringOption("date-from", "date_from", "Count shows from this venue-local YYYY-MM-DD date; omitted counts from today."),
+    stringOption("date-to", "date_to", "Count shows through this venue-local YYYY-MM-DD date, inclusive; omitted has no end.")
+  ], validateConcertDates, "array", {
+    outputTooLargeHint: "Concert availability has no pagination; retry later if the provider response exceeds the output limit.",
+    helpNotes: [
+      "One public GET returns enabled, offered covers, max_days_ahead and metros with upcoming show counts.",
+      "Dates are local to each venue. Either bound may be supplied alone; paired dates must be ordered.",
+      "Existing markets are unaffected. This command does not list concerts, create markets, or verify a contract's rules."
+    ]
+  }),
   command(["weather"], "Inspect a city's public Kalshi temperature index.", "/live_data/weather/{city}", "timeseries", [
     tickerOption("city", "city", "Weather index city ID, for example miami.", {required: true, location: "path", pathName: "city"}),
     integerOption("from", "from", "Inclusive start in Unix milliseconds; pair with --to.", {min: 0}),
