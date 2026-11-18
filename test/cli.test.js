@@ -915,6 +915,7 @@ test("all commands resolve to the fixed endpoint and response contract", async (
   const cases = [
     [["exchange", "status"], "/exchange/status", "boolean"],
     [["exchange", "schedule"], "/exchange/schedule", "object"],
+    [["concerts", "availability"], "/concert_cancellation_markets/availability", "array"],
     [["weather", "--city", "miami", "--last-sec", "60"], "/live_data/weather/miami", "array"],
     [["weather", "availability"], "/weather_point_markets/availability", "boolean"],
     [["weather", "calibrations", "--city", "miami"], "/live_data/weather/miami/calibrations", "array"],
@@ -2008,4 +2009,82 @@ test("weather availability preserves false and empty lists and fails atomically"
   assert.equal(yamlErrorCode(large.stderr), "output_too_large");
   assert.match(large.stderr, /Weather availability has no narrowing options/);
   assert.doesNotMatch(large.stderr, /smaller --limit/);
+});
+
+
+test("concert availability preserves metros and cover metadata with one public GET", async () => {
+  const body = {enabled: false, covers: ["either"], max_days_ahead: 180,
+    metros: [{id: "jambase:1", latitude: 40.123456789, upcoming_shows: 0}], future: null};
+  let calls = 0;
+  const parsed = parseArguments(["concerts", "availability", "--date-from", "2028-02-29", "--date-to", "2028-03-01"]);
+  const result = await executeRequest(parsed.definition, buildRequest(parsed.definition, parsed.values), {
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, `${BASE_URL}/concert_cancellation_markets/availability?date_from=2028-02-29&date_to=2028-03-01`);
+      assert.equal(init.method, "GET");
+      assert.equal(init.credentials, "omit");
+      assert.deepEqual(Object.keys(init.headers).sort(), ["accept", "user-agent"]);
+      return jsonResponse(body);
+    }
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.query, {date_from: "2028-02-29", date_to: "2028-03-01"});
+  assert.deepEqual(result.data, body);
+});
+
+test("concert availability plans dates offline and validates calendar ranges before fetching", async () => {
+  const noFetch = {fetchImpl: async () => assert.fail("must not fetch")};
+  for (const flags of [[], ["--date-from", "2028-02-29"], ["--date-to", "2028-02-29"],
+    ["--date-from", "2028-02-29", "--date-to", "2028-02-29"]]) {
+    const plan = await invoke(["plan", "concerts", "availability", ...flags], noFetch);
+    assert.equal(plan.exitCode, 0, plan.stderr);
+    assert.match(plan.stdout, /endpoint: \/concert_cancellation_markets\/availability/);
+  }
+  for (const flags of [["--date-from", "2026-02-29"], ["--date-to", "2026-04-31"],
+    ["--date-from", "2026-13-01"], ["--date-from", "2026-1-01"], ["--date-from", "tomorrow"],
+    ["--date-from", "2026-11-20", "--date-to", "2026-11-19"],
+    ["--date-from", "2026-11-20", "--date-from", "2026-11-20"], ["--date-to"],
+    ["--limit", "10"], ["--cursor", "next"], ["--api-key", "unused"], ["--all"]]) {
+    const result = await invoke(["concerts", "availability", ...flags], noFetch);
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^error:/);
+  }
+  const description = await invoke(["describe", "concerts", "availability"], noFetch);
+  assert.match(description.stdout, /result_key: metros/);
+  assert.match(description.stdout, /result_type: array/);
+  const catalog = await invoke(["commands", "--group", "concerts"], noFetch);
+  assert.equal(catalog.exitCode, 0);
+  assert.match(catalog.stdout, /count: 1/);
+});
+
+test("concert availability preserves empty lists and fails atomically", async () => {
+  const empty = await invoke(["concerts", "availability"], {
+    fetchImpl: async () => jsonResponse({enabled: false, covers: [], max_days_ahead: 0, metros: []})
+  });
+  assert.equal(empty.exitCode, 0, empty.stderr);
+  assert.match(empty.stdout, /count: 0/);
+  assert.match(empty.stdout, /enabled: false/);
+  for (const body of [{}, {metros: null}, {metros: {}}]) {
+    const bad = await invoke(["concerts", "availability"], {fetchImpl: async () => jsonResponse(body)});
+    assert.equal(bad.exitCode, 1);
+    assert.equal(bad.stdout, "");
+    assert.equal(yamlErrorCode(bad.stderr), "upstream_shape_error");
+  }
+  let calls = 0;
+  const failed = await invoke(["concerts", "availability"], {fetchImpl: async () => {
+    calls += 1;
+    return jsonResponse({message: "Unavailable"}, {status: 500});
+  }});
+  assert.equal(calls, 1);
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.stdout, "");
+  const large = await invoke(["concerts", "availability"], {
+    fetchImpl: async () => jsonResponse({metros: [], future: "x".repeat(MAX_OUTPUT_BYTES)})
+  });
+  assert.equal(large.exitCode, 1);
+  assert.equal(large.stdout, "");
+  assert.equal(yamlErrorCode(large.stderr), "output_too_large");
+  assert.match(large.stderr, /Concert availability/);
 });

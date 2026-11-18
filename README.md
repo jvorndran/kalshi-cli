@@ -53,6 +53,7 @@ Do not construct a market ticker from a team name. Verify the returned title, pa
 | Family | Commands | Purpose |
 | --- | --- | --- |
 | Exchange | `exchange status`, `exchange schedule` | Inspect exchange availability, trading hours, and maintenance windows. |
+| Concerts | `concerts availability` | Inspect covers, metro show counts and availability with optional venue-local dates. |
 | Structured targets | `structured-targets`, `structured-targets get` | Discover target identities, details, and provider source IDs. |
 | Incentives | `incentives` | Discover public market reward programs by status, type, or exact description. |
 | Milestones | `milestones`, `milestones get`, `milestones game-stats`, `milestones live`, `milestones live batch` | Discover scheduled milestones, inspect related event tickers, and retrieve provider live data. |
@@ -248,3 +249,5 @@ Use `kalshi commands --result-type object` to find single-object results, `array
 Use `kalshi commands --required-option ticker` to find commands that explicitly require that option on every invocation. Supply an exact bare name. The filter covers unconditional required flags in the installed catalog; use `describe` for conditional requirements. It combines with all other catalog filters, preserves row order, and records `filters.required_option`. Names that are never explicitly required fail locally. This command works offline.
 
 Use `kalshi weather availability` to retrieve public weather point market availability, NOAA MRMS domains and offered variables in one unauthenticated `GET /weather_point_markets/availability`. It accepts no filters or pagination flags. `count` is 1 even when `data.enabled` is false; empty domain/variable lists and unknown fields remain unchanged. This metadata concerns new market availability; existing markets are unaffected, and a location inside an offered domain may still be refused over open water. The command never creates markets or determines contract resolution rules.
+
+Use `kalshi concerts availability --date-from 2026-12-01 --date-to 2026-12-31` to inspect public concert market availability, offered covers, the maximum scheduling horizon and metro show counts. Both dates are optional, venue-local `YYYY-MM-DD` bounds; `date-to` is inclusive. Omit the start for counts from today or the end for no end date. Invalid calendar dates and reversed ranges fail before a request. One unauthenticated GET `/concert_cancellation_markets/availability` returns the complete provider response; `count` describes `data.metros`, including zero for an empty list. This command has no pagination. It reads metadata without listing concerts, creating markets or establishing a contract's rules.

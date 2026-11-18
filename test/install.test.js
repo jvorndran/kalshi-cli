@@ -71,6 +71,12 @@ test("packed artifact installs offline and exposes the kalshi executable", {time
     assert.equal(weather.stderr, "");
     assert.match(weather.stdout, /endpoint: \/weather_point_markets\/availability/);
 
+    const concerts = await run(executable, ["plan", "concerts", "availability", "--date-from", "2028-02-29"], {cwd: installRoot});
+    assert.equal(concerts.code, 0, concerts.stderr);
+    assert.equal(concerts.stderr, "");
+    assert.match(concerts.stdout, /endpoint: \/concert_cancellation_markets\/availability/);
+    assert.match(concerts.stdout, /date_from: "2028-02-29"/);
+
     const catalog = await run(executable, ["commands", "--group", "historical", "--search", "candlesticks", "--option", "period-interval", "--result-type", "array", "--required-option", "ticker"], {cwd: installRoot});
     assert.equal(catalog.code, 0, catalog.stderr);
     assert.equal(catalog.stderr, "");
