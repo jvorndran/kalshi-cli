@@ -1,0 +1,77 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {COMMANDS, describeCommand} from "../src/commands.js";
+import {runCli} from "../src/main.js";
+import {renderYamlDocument} from "../src/yaml.js";
+
+async function invoke(flags) {
+  let stdout = "";
+  let stderr = "";
+  const exitCode = await runCli(["commands", ...flags], {
+    fetchImpl: async () => assert.fail("catalog must stay offline"),
+    stdout: {write(value) { stdout += value; }},
+    stderr: {write(value) { stderr += value; }}
+  });
+  return {exitCode, stdout, stderr};
+}
+
+test("detailed catalog returns the installed schemas for filtered public commands offline", async () => {
+  const result = await invoke(["--details", "true", "--group", "historical", "--option", "period-interval"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  const definitions = COMMANDS.filter(({path, options}) => path[0] === "historical" &&
+    options.some(({flag}) => flag === "period-interval"));
+  assert.equal(result.stdout, renderYamlDocument({
+    schema_version: 1, command: "commands", details: true,
+    filters: {group: "historical", option: "period-interval"},
+    count: definitions.length, commands: definitions.map(describeCommand)
+  }));
+  assert.match(result.stdout, /result_key: candlesticks/);
+  assert.match(result.stdout, /flag: "--period-interval"/);
+  assert.match(result.stdout, /required: true/);
+  assert.match(result.stdout, /choices:/);
+});
+
+test("explicit false preserves the compact catalog and detailed empty results stay well formed", async () => {
+  assert.deepEqual(await invoke(["--details", "false"]), await invoke([]));
+  const empty = await invoke(["--details=true", "--group", "exchange", "--option", "cursor"]);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /details: true/);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  assert.deepEqual(await invoke(["--no-details"]), await invoke([]));
+  assert.match((await invoke(["--help"])).stdout, /--details\s+Include/);
+});
+
+test("invalid detail flags fail before output or fetching", async () => {
+  for (const flags of [["--details=yes"], ["--details", "TRUE"], ["--no-details=false"],
+    ["--details", "true", "--details", "false"]]) {
+    const result = await invoke(flags);
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /error:/);
+  }
+});
+
+test("oversized detailed catalog fails atomically with a narrowing hint", async () => {
+  const definition = COMMANDS[0];
+  const previous = definition.helpNotes;
+  try {
+    definition.helpNotes = ["x".repeat(65536)];
+    const result = await invoke(["--details", "true", "--group", "exchange"]);
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /code: output_too_large/);
+    assert.match(result.stderr, /--group/);
+  } finally {
+    if (previous === undefined) delete definition.helpNotes;
+    else definition.helpNotes = previous;
+  }
+});
+
+test("the full detailed catalog and boolean shorthand work without requests", async () => {
+  const result = await invoke(["--details"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, new RegExp(`count: ${COMMANDS.length}\\n`));
+  assert.equal(result.stdout, (await invoke(["--details=true"])).stdout);
+});

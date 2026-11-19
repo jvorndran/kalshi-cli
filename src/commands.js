@@ -431,7 +431,9 @@ const commandGroups = [...new Set(COMMANDS.map(({path}) => path[0]))];
 export const CATALOG_DEFINITION = {
   name: "commands",
   summary: "List or filter the installed public GET commands as YAML without a request.",
+  outputTooLargeHint: "Narrow --details with --group, --search, --option or other catalog filters.",
   options: [
+    booleanOption("details", "details", "Include each matching command's full offline schema, options and notes; narrow large results with catalog filters."),
     stringOption("group", "group", `Keep one exact top-level command group: ${commandGroups.join(", ")}.`, {
       enum: commandGroups
     }),
@@ -471,7 +473,7 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option, pagination, result_type, required_option} = {}) {
+export function commandCatalog({group, search, option, pagination, result_type, required_option, details} = {}) {
   const needle = search?.toLowerCase();
   const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType}) =>
     (required_option === undefined || options.some(({flag, required}) => flag === required_option && required === true)) &&
@@ -484,6 +486,7 @@ export function commandCatalog({group, search, option, pagination, result_type, 
   return {
     schema_version: 1,
     command: "commands",
+    ...(details ? {details: true} : {}),
     ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
@@ -493,7 +496,8 @@ export function commandCatalog({group, search, option, pagination, result_type, 
       ...(required_option === undefined ? {} : {required_option})
     }}),
     count: definitions.length,
-    commands: definitions.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
+    commands: details ? definitions.map(describeCommand)
+      : definitions.map(({name, summary, endpoint}) => ({command: name, summary, endpoint})),
   };
 }
 

@@ -82,6 +82,11 @@ test("packed artifact installs offline and exposes the kalshi executable", {time
     assert.equal(catalog.stderr, "");
     assert.match(catalog.stdout, /count: 1\ncommands:\n  - command: historical markets candlesticks\n/);
     assert.match(catalog.stdout, /  required_option: ticker\n/);
+    const details = await run(executable, ["commands", "--group", "exchange", "--details"], {cwd: installRoot});
+    assert.equal(details.code, 0, details.stderr);
+    assert.equal(details.stderr, "");
+    assert.match(details.stdout, /details: true/);
+    assert.match(details.stdout, /result_key: exchange_active/);
   } finally {
     await rm(root, {recursive: true, force: true});
   }
