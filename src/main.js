@@ -74,7 +74,7 @@ export async function runCli(argv, options = {}) {
       return 0;
     }
     if (parsed.kind === "command_catalog") {
-      writeYaml(stdout, commandCatalog(parsed.values));
+      writeResultYaml(stdout, commandCatalog(parsed.values), CATALOG_DEFINITION);
       return 0;
     }
 

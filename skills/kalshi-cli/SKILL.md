@@ -88,3 +88,5 @@ Use `kalshi commands --required-option ticker` to find commands that explicitly 
 Use `kalshi weather availability` to retrieve public weather point market availability, NOAA MRMS domains and offered variables in one unauthenticated `GET /weather_point_markets/availability`. It accepts no filters or pagination flags. `count` is 1 even when `data.enabled` is false; empty domain/variable lists and unknown fields remain unchanged. This metadata concerns new market availability; existing markets are unaffected, and a location inside an offered domain may still be refused over open water. The command never creates markets or determines contract resolution rules.
 
 Use `concerts availability` for public covers, metro show counts and availability. Optional venue-local `--date-from`/`--date-to` dates are validated before the single GET. No concert listing or market creation is supported; see the command contract.
+
+Use `commands --details` with catalog filters for full offline command schemas in one call. Rows match `describe`; output above 64 KiB fails atomically. See the command contract.
