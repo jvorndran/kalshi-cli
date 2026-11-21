@@ -438,6 +438,9 @@ export const CATALOG_DEFINITION = {
       enum: commandGroups
     }),
     stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200}),
+    stringOption("result-key", "result_key", "Keep commands with this exact primary response field, such as markets or market.", {
+      enum: [...new Set(COMMANDS.map(({resultKey}) => resultKey))]
+    }),
     stringOption("result-type", "result_type", "Keep commands by their primary result type: array, object, string, boolean.", {
       enum: [...new Set(COMMANDS.map(({resultType}) => resultType))]
     }),
@@ -473,11 +476,12 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option, pagination, result_type, required_option, details} = {}) {
+export function commandCatalog({group, search, option, pagination, result_type, required_option, result_key, details} = {}) {
   const needle = search?.toLowerCase();
-  const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType}) =>
+  const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType, resultKey}) =>
     (required_option === undefined || options.some(({flag, required}) => flag === required_option && required === true)) &&
     (result_type === undefined || resultType === result_type) &&
+    (result_key === undefined || resultKey === result_key) &&
     (group === undefined || path[0] === group) &&
     (needle === undefined || [name, summary, endpoint].some((value) => value.toLowerCase().includes(needle))) &&
     (option === undefined || options.some(({flag}) => flag === option)) &&
@@ -487,13 +491,14 @@ export function commandCatalog({group, search, option, pagination, result_type, 
     schema_version: 1,
     command: "commands",
     ...(details ? {details: true} : {}),
-    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined ? {} : {filters: {
+    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined && result_key === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
       ...(option === undefined ? {} : {option}),
       ...(pagination === undefined ? {} : {pagination}),
       ...(result_type === undefined ? {} : {result_type}),
-      ...(required_option === undefined ? {} : {required_option})
+      ...(required_option === undefined ? {} : {required_option}),
+      ...(result_key === undefined ? {} : {result_key})
     }}),
     count: definitions.length,
     commands: details ? definitions.map(describeCommand)

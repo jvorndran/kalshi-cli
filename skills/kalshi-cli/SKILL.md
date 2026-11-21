@@ -81,6 +81,8 @@ Use `kalshi commands --option cursor` to find commands with that exact supported
 
 Use `kalshi commands --pagination cursor` to discover commands that accept a caller-supplied cursor, or `--pagination none` for commands without a cursor option. This describes the installed CLI's options, not whether a provider response is complete. The filter works offline, combines with group, search, and option filters, and records its value in `filters.pagination`. It preserves catalog order and row fields; it does not fetch or follow pages. Other values fail locally.
 
+Use `commands --result-key markets` for an exact primary response-field match across groups; it combines with all catalog filters and `--details` offline.
+
 Use `commands --result-type array|object|string|boolean` to discover primary result shapes offline; combine with the other catalog filters. See the command contract for scope and validation.
 
 Use `kalshi commands --required-option ticker` to find commands that explicitly require that option on every invocation. Supply an exact bare name. The filter covers unconditional required flags in the installed catalog; use `describe` for conditional requirements. It combines with all other catalog filters, preserves row order, and records `filters.required_option`. Names that are never explicitly required fail locally. This command works offline.
