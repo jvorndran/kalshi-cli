@@ -75,3 +75,40 @@ test("the full detailed catalog and boolean shorthand work without requests", as
   assert.match(result.stdout, new RegExp(`count: ${COMMANDS.length}\\n`));
   assert.equal(result.stdout, (await invoke(["--details=true"])).stdout);
 });
+
+test("catalog discovers exact primary result keys offline", async () => {
+  for (const key of [...new Set(COMMANDS.map(({resultKey}) => resultKey))]) {
+    const result = await invoke(["--result-key", key]);
+    const expected = COMMANDS.filter(({resultKey}) => resultKey === key);
+    assert.equal(result.exitCode, 0, key);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({
+      schema_version: 1, command: "commands", filters: {result_key: key},
+      count: expected.length,
+      commands: expected.map(({name, summary, endpoint}) => ({command: name, summary, endpoint}))
+    }));
+  }
+});
+
+test("result key discovery composes with detailed schemas and existing catalog filters", async () => {
+  const result = await invoke(["--details", "--result-key= markets ", "--group", "historical", "--pagination", "cursor"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /result_key: markets/);
+  assert.match(result.stdout, /count: 1\ncommands:/);
+  assert.match(result.stdout, /command: historical markets/);
+  const empty = await invoke(["--result-key", "markets", "--group", "exchange"]);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  assert.match((await invoke(["--help"])).stdout, /--result-key <value>/);
+});
+
+test("malformed or unknown primary result keys fail before any output or request", async () => {
+  for (const flags of [["--result-key"], ["--result-key", " "], ["--result-key", "Markets"],
+    ["--result-key", "data"], ["--result-key", "market", "--result-key", "markets"]]) {
+    const result = await invoke(flags);
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /error:/);
+  }
+});
