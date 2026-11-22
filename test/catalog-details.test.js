@@ -112,3 +112,50 @@ test("malformed or unknown primary result keys fail before any output or request
     assert.match(result.stderr, /error:/);
   }
 });
+
+test("catalog excludes each known option without fetching or changing row order", async () => {
+  for (const flag of [...new Set(COMMANDS.flatMap(({options}) => options.map(({flag}) => flag)))]) {
+    const result = await invoke(["--exclude-option", flag]);
+    const expected = COMMANDS.filter(({options}) => !options.some(option => option.flag === flag));
+    assert.equal(result.exitCode, 0, flag);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({
+      schema_version: 1, command: "commands", filters: {exclude_option: flag},
+      count: expected.length,
+      commands: expected.map(({name, summary, endpoint}) => ({command: name, summary, endpoint}))
+    }));
+  }
+});
+
+test("option exclusions compose with detailed catalog discovery and contradictory filters", async () => {
+  const result = await invoke(["--details", "--group", "markets", "--option", "ticker",
+    "--pagination", "none", "--result-type", "object", "--required-option", "ticker",
+    "--result-key", "orderbook_fp", "--exclude-option= cursor ", "--search", "ORDERBOOK"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  const expected = COMMANDS.find(({name}) => name === "markets orderbook");
+  assert.equal(result.stdout, renderYamlDocument({
+    schema_version: 1, command: "commands", details: true,
+    filters: {group: "markets", search: "ORDERBOOK", option: "ticker", pagination: "none",
+      result_type: "object", required_option: "ticker", result_key: "orderbook_fp", exclude_option: "cursor"},
+    count: 1, commands: [describeCommand(expected)]
+  }));
+  const empty = await invoke(["--option", "ticker", "--exclude-option", "ticker"]);
+  assert.equal(empty.exitCode, 0);
+  assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  assert.match((await invoke(["--help"])).stdout, /--exclude-option <value>/);
+  const unfiltered = await invoke([]);
+  assert.equal(unfiltered.stdout, renderYamlDocument({schema_version: 1, command: "commands",
+    count: COMMANDS.length, commands: COMMANDS.map(({name, summary, endpoint}) => ({command: name, summary, endpoint}))}));
+});
+
+test("unknown or malformed option exclusions fail atomically offline", async () => {
+  for (const flags of [["--exclude-option"], ["--exclude-option", " "], ["--exclude-option", "Ticker"],
+    ["--exclude-option", "--ticker"], ["--exclude-option", "unknown"],
+    ["--exclude-option", "ticker", "--exclude-option", "cursor"]]) {
+    const result = await invoke(flags);
+    assert.equal(result.exitCode, 2, flags.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /error:/);
+  }
+});
