@@ -159,3 +159,34 @@ test("unknown or malformed option exclusions fail atomically offline", async () 
     assert.match(result.stderr, /error:/);
   }
 });
+
+test("option search finds flags, provider parameters and descriptions offline", async () => {
+  for (const needle of ["Unix timestamp", "min_ts", "PERIOD-INTERVAL", "not-a-real-option", "[a-z]"]) {
+    const expected = COMMANDS.filter(({options}) => options.some(option =>
+      [option.flag, option.query, option.pathName, option.description].some(value => value?.toLowerCase().includes(needle.toLowerCase()))));
+    const result = await invoke(["--option-search", needle]);
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({schema_version:1, command:"commands",
+      filters:{option_search:needle}, count:expected.length,
+      commands:expected.map(({name,summary,endpoint}) => ({command:name,summary,endpoint}))}));
+  }
+});
+test("option search composes with catalog filters and detailed schemas", async () => {
+  const result = await invoke(["--option-search= timestamp ", "--group", "historical", "--search", "trades", "--details", "--exclude-option", "period-interval"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout, renderYamlDocument({schema_version:1, command:"commands", details:true,
+    filters:{group:"historical",search:"trades",exclude_option:"period-interval",option_search:"timestamp"},
+    count:1,commands:[describeCommand(COMMANDS.find(({name}) => name === "historical trades"))]}));
+  assert.match((await invoke(["--help"])).stdout, /--option-search <value>/);
+});
+test("invalid option searches fail atomically without fetching", async () => {
+  for (const flags of [["--option-search"],["--option-search", " "],["--option-search", "x".repeat(201)],
+    ["--option-search", "ticker", "--option-search", "cursor"]]) {
+    const result = await invoke(flags);
+    assert.equal(result.exitCode,2);
+    assert.equal(result.stdout,"");
+    assert.match(result.stderr,/error:/);
+  }
+});
