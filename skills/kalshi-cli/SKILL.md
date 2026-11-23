@@ -94,3 +94,5 @@ Use `concerts availability` for public covers, metro show counts and availabilit
 Use `commands --details` with catalog filters for full offline command schemas in one call. Rows match `describe`; output above 64 KiB fails atomically. See the command contract.
 
 Use `kalshi commands --exclude-option ticker` to find commands without that option. Supply an exact bare option name from the installed catalog. The filter combines with all other catalog filters and `--details`, preserves row order, and records `filters.exclude_option`. Including and excluding the same option succeeds with zero matches. Unknown names fail locally. This discovery command makes no request.
+
+Use `kalshi commands --option-search "Unix timestamp"` to find commands by a literal substring in option names, provider parameter names or descriptions. Matching ignores case; input is trimmed and limited to 200 characters. It combines with all catalog filters and `--details`, preserves catalog order and records `filters.option_search`. No matches returns an empty catalog. This command stays offline.
