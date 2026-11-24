@@ -190,3 +190,34 @@ test("invalid option searches fail atomically without fetching", async () => {
     assert.match(result.stderr,/error:/);
   }
 });
+
+test("choice discovery matches exact enumerated values offline including numeric choices", async () => {
+  for (const choice of ["settled", "open", "60", "OPEN", "not-a-choice"]) {
+    const expected = COMMANDS.filter(({options}) => options.some(option => option.enum?.some(value => String(value) === choice)));
+    const result = await invoke(["--option-choice", choice]);
+    assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({schema_version:1,command:"commands",
+      filters:{option_choice:choice},count:expected.length,
+      commands:expected.map(({name,summary,endpoint})=>({command:name,summary,endpoint}))}));
+  }
+});
+test("choice discovery scopes to the named option and composes with detailed filters", async () => {
+  const result = await invoke(["--option-choice= settled ","--option","status","--group","markets","--details"]);
+  assert.equal(result.exitCode,0); assert.equal(result.stderr,"");
+  const expected=[COMMANDS.find(({name})=>name==="markets")];
+  assert.equal(result.stdout,renderYamlDocument({schema_version:1,command:"commands",details:true,
+    filters:{group:"markets",option:"status",option_choice:"settled"},count:1,commands:expected.map(describeCommand)}));
+  const numeric = await invoke(["--option-choice", "60", "--option", "period-interval"]);
+  assert.equal(numeric.exitCode,0);
+  assert.match(numeric.stdout,/count: 3\ncommands:/);
+  assert.match(numeric.stdout,/command: historical markets candlesticks/);
+  const empty = await invoke(["--option-choice","settled","--option","ticker"]);
+  assert.equal(empty.exitCode,0); assert.match(empty.stdout,/count: 0\ncommands: \[\]/);
+  assert.match((await invoke(["--help"])).stdout,/--option-choice <value>/);
+});
+test("malformed choice discovery fails atomically before requests",async()=>{
+  for(const flags of [["--option-choice"],["--option-choice"," "],["--option-choice","x".repeat(201)],
+    ["--option-choice","open","--option-choice","settled"]]) {
+    const result=await invoke(flags); assert.equal(result.exitCode,2); assert.equal(result.stdout,""); assert.match(result.stderr,/error:/);
+  }
+});
