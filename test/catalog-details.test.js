@@ -221,3 +221,30 @@ test("malformed choice discovery fails atomically before requests",async()=>{
     const result=await invoke(flags); assert.equal(result.exitCode,2); assert.equal(result.stdout,""); assert.match(result.stderr,/error:/);
   }
 });
+for(const type of ["string","integer","boolean"])test(`discover ${type} options offline`,async()=>{
+  const expected=COMMANDS.filter(({options})=>options.some(option=>option.type===type));
+  assert.ok(expected.length>0);
+  const r=await invoke(["--option-type",type]);assert.equal(r.exitCode,0);assert.equal(r.stderr,"");
+  assert.equal(r.stdout,renderYamlDocument({schema_version:1,command:"commands",filters:{option_type:type},
+    count:expected.length,commands:expected.map(({name,summary,endpoint})=>({command:name,summary,endpoint}))}));
+});
+test("option type applies to the named option and composes with detailed catalog filters",async()=>{
+  const r=await invoke(["--option-type= integer ","--option","period-interval","--option-choice","60",
+    "--group","historical","--search","candlesticks","--details"]);
+  const expected=COMMANDS.filter(({name})=>name==="historical markets candlesticks");assert.equal(expected.length,1);
+  assert.equal(r.exitCode,0);assert.equal(r.stderr,"");
+  assert.equal(r.stdout,renderYamlDocument({schema_version:1,command:"commands",details:true,
+    filters:{group:"historical",search:"candlesticks",option:"period-interval",option_choice:"60",option_type:"integer"},
+    count:1,commands:expected.map(describeCommand)}));
+  const empty=await invoke(["--option","ticker","--option-type","integer"]);
+  assert.equal(empty.exitCode,0);assert.match(empty.stdout,/count: 0\ncommands: \[\]/);
+  assert.match((await invoke(["--help"])).stdout,/--option-type <value>/);
+});
+test("invalid option types fail atomically offline and unfiltered catalog remains unchanged",async()=>{
+  for(const flags of [["--option-type"],["--option-type"," "],["--option-type","number"],
+    ["--option-type","Integer"],["--option-type","integer","--option-type","string"]]){
+    const r=await invoke(flags);assert.equal(r.exitCode,2);assert.equal(r.stdout,"");assert.match(r.stderr,/error:/);
+  }
+  const r=await invoke([]);assert.equal(r.stdout,renderYamlDocument({schema_version:1,command:"commands",
+    count:COMMANDS.length,commands:COMMANDS.map(({name,summary,endpoint})=>({command:name,summary,endpoint}))}));
+});
