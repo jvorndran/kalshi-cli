@@ -438,6 +438,7 @@ export const CATALOG_DEFINITION = {
       enum: commandGroups
     }),
     stringOption("search", "search", "Case-insensitive literal substring in command names, summaries or endpoint templates (maximum 200 characters).", {maxLength: 200}),
+    stringOption("option-location", "option_location", "Keep commands with a path or query option; --option scopes it to one option.", {enum: ["path", "query"]}),
     stringOption("option-type", "option_type", "Keep commands with an option of this type; --option scopes it to one option.", {enum: ["string", "integer", "boolean"]}),
     stringOption("option-choice", "option_choice", "Keep commands accepting this exact enumerated value; --option scopes it to one option (maximum 200 characters).", {maxLength: 200}),
     stringOption("option-search", "option_search", "Case-insensitive literal substring in option names, provider parameters or descriptions (maximum 200 characters).", {maxLength: 200}),
@@ -482,10 +483,12 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option, pagination, result_type, required_option, result_key, exclude_option, option_search, option_choice, option_type, details} = {}) {
+export function commandCatalog({group, search, option, pagination, result_type, required_option, result_key, exclude_option, option_search, option_choice, option_type, option_location, details} = {}) {
   const needle = search?.toLowerCase();
   const optionNeedle = option_search?.toLowerCase();
   const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType, resultKey}) =>
+    (option_location === undefined || options.some(field =>
+      (option === undefined || field.flag === option) && (field.location ?? "query") === option_location)) &&
     (option_type === undefined || options.some(field =>
       (option === undefined || field.flag === option) && field.type === option_type)) &&
     (option_choice === undefined || options.some(({flag, enum: choices}) =>
@@ -505,7 +508,7 @@ export function commandCatalog({group, search, option, pagination, result_type, 
     schema_version: 1,
     command: "commands",
     ...(details ? {details: true} : {}),
-    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined && result_key === undefined && exclude_option === undefined && option_search === undefined && option_choice === undefined && option_type === undefined ? {} : {filters: {
+    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined && result_key === undefined && exclude_option === undefined && option_search === undefined && option_choice === undefined && option_type === undefined && option_location === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
       ...(option === undefined ? {} : {option}),
@@ -516,7 +519,8 @@ export function commandCatalog({group, search, option, pagination, result_type, 
       ...(exclude_option === undefined ? {} : {exclude_option}),
       ...(option_search === undefined ? {} : {option_search}),
       ...(option_choice === undefined ? {} : {option_choice}),
-      ...(option_type === undefined ? {} : {option_type})
+      ...(option_type === undefined ? {} : {option_type}),
+      ...(option_location === undefined ? {} : {option_location})
     }}),
     count: definitions.length,
     commands: details ? definitions.map(describeCommand)
