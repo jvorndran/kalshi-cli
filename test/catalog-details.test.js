@@ -248,3 +248,43 @@ test("invalid option types fail atomically offline and unfiltered catalog remain
   const r=await invoke([]);assert.equal(r.stdout,renderYamlDocument({schema_version:1,command:"commands",
     count:COMMANDS.length,commands:COMMANDS.map(({name,summary,endpoint})=>({command:name,summary,endpoint}))}));
 });
+
+test("catalog option locations distinguish path tickers from query tickers offline", async () => {
+  for (const [location, expected] of [
+    ["path", ["markets get", "markets orderbook", "markets candlesticks"]],
+    ["query", ["markets trades"]]
+  ]) {
+    const result = await invoke(["--group", "markets", "--option", "ticker", "--option-location", location]);
+    assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({
+      schema_version: 1, command: "commands",
+      filters: {group: "markets", option: "ticker", option_location: location},
+      count: expected.length,
+      commands: expected.map(name => {
+        const definition = COMMANDS.find(command => command.name === name);
+        return {command: name, summary: definition.summary, endpoint: definition.endpoint};
+      })
+    }));
+  }
+});
+
+test("catalog location composes with detailed schemas and other catalog filters", async () => {
+  const result = await invoke(["--details", "--group", "markets", "--option", "ticker",
+    "--option-location", " path ", "--option-type", "string", "--result-type", "object", "--search", "one public"]);
+  assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+  assert.match(result.stdout, /option_location: path/); assert.match(result.stdout, /count: 1/);
+  assert.match(result.stdout, /command: markets get\n/); assert.match(result.stdout, /location: path/);
+  const empty = await invoke(["--group", "exchange", "--option-location", "query"]);
+  assert.equal(empty.exitCode, 0); assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  const unscoped = await invoke(["--group", "markets", "--option-location", "path"]);
+  assert.equal(unscoped.exitCode, 0); assert.match(unscoped.stdout, /count: 3/);
+  const help = await invoke(["--help"]); assert.match(help.stdout, /--option-location/);
+});
+
+test("invalid and duplicate catalog option locations fail without fetching or stdout", async () => {
+  for (const flags of [["--option-location", "body"], ["--option-location", "PATH"],
+    ["--option-location", ""], ["--option-location", "path", "--option-location", "query"]]) {
+    const result = await invoke(flags);
+    assert.equal(result.exitCode, 2); assert.equal(result.stdout, ""); assert.match(result.stderr, /error:/);
+  }
+});
