@@ -102,3 +102,5 @@ Use `kalshi commands --option-choice settled` to find commands whose installed o
 Use `kalshi commands --option-type integer` to find commands with numeric integer options, or choose `string` or `boolean`. Add `--option period-interval` to match the type of that specific option. This offline filter uses the installed schema, combines with other catalog filters and `--details`, and preserves catalog order. Input is trimmed; unknown types fail validation. Applied values appear in `filters.option_type`.
 
 Use `commands --option-location path|query` to discover parameter locations offline; add `--option ticker` to scope the match to one flag. See the command contract.
+
+Discover list-capable public commands offline with `kalshi commands --option-csv`, optionally scoped by `--option tickers`. `--option-csv false` selects scalar inputs. See the command contract for composition and empty-result behavior.
