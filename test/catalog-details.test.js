@@ -288,3 +288,42 @@ test("invalid and duplicate catalog option locations fail without fetching or st
     assert.equal(result.exitCode, 2); assert.equal(result.stdout, ""); assert.match(result.stderr, /error:/);
   }
 });
+
+test("CSV discovery selects multi-value and scalar options offline", async () => {
+  for (const csv of [true, false]) {
+    const expected = COMMANDS.filter(({options}) => options.some(field => Boolean(field.csv) === csv));
+    assert.ok(expected.length > 0);
+    const result = await invoke(["--option-csv", String(csv)]);
+    assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+    assert.equal(result.stdout, renderYamlDocument({schema_version: 1, command: "commands",
+      filters: {option_csv: csv}, count: expected.length,
+      commands: expected.map(({name, summary, endpoint}) => ({command: name, summary, endpoint}))}));
+  }
+  const result = await invoke(["--option-csv"]);
+  assert.deepEqual(result, await invoke(["--option-csv=true"]));
+  assert.deepEqual(await invoke(["--no-option-csv"]), await invoke(["--option-csv=false"]));
+});
+
+test("CSV discovery scopes the named option and composes with detailed filters", async () => {
+  const result = await invoke(["--option-csv", "--option", "tickers", "--group", "markets", "--details"]);
+  assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+  const expected = ["markets", "markets orderbooks"].map(name => COMMANDS.find(row => row.name === name));
+  assert.equal(result.stdout, renderYamlDocument({schema_version: 1, command: "commands", details: true,
+    filters: {group: "markets", option: "tickers", option_csv: true}, count: 2,
+    commands: expected.map(describeCommand)}));
+  assert.match(result.stdout, /comma_separated: true/);
+  for (const flags of [["--option", "ticker", "--option-csv"],
+    ["--option", "tickers", "--no-option-csv"], ["--group", "exchange", "--no-option-csv"]]) {
+    const empty = await invoke(flags); assert.equal(empty.exitCode, 0);
+    assert.match(empty.stdout, /count: 0\ncommands: \[\]/);
+  }
+  assert.match((await invoke(["--help"])).stdout, /--option-csv/);
+});
+
+test("CSV discovery rejects invalid and duplicate flags before output or requests", async () => {
+  for (const flags of [["--option-csv=yes"], ["--option-csv", "TRUE"],
+    ["--option-csv", "--no-option-csv"], ["--no-option-csv=false"]]) {
+    const result = await invoke(flags); assert.equal(result.exitCode, 2);
+    assert.equal(result.stdout, ""); assert.match(result.stderr, /error:/);
+  }
+});

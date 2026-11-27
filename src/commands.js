@@ -433,6 +433,7 @@ export const CATALOG_DEFINITION = {
   summary: "List or filter the installed public GET commands as YAML without a request.",
   outputTooLargeHint: "Narrow --details with --group, --search, --option or other catalog filters.",
   options: [
+    booleanOption("option-csv", "option_csv", "Keep commands with comma-separated inputs (true) or scalar inputs (false); --option scopes the match."),
     booleanOption("details", "details", "Include each matching command's full offline schema, options and notes; narrow large results with catalog filters."),
     stringOption("group", "group", `Keep one exact top-level command group: ${commandGroups.join(", ")}.`, {
       enum: commandGroups
@@ -483,10 +484,12 @@ export function rootHelp(version) {
   ].join("\n");
 }
 
-export function commandCatalog({group, search, option, pagination, result_type, required_option, result_key, exclude_option, option_search, option_choice, option_type, option_location, details} = {}) {
+export function commandCatalog({group, search, option, pagination, result_type, required_option, result_key, exclude_option, option_search, option_choice, option_type, option_location, option_csv, details} = {}) {
   const needle = search?.toLowerCase();
   const optionNeedle = option_search?.toLowerCase();
   const definitions = COMMANDS.filter(({path, name, summary, endpoint, options, resultType, resultKey}) =>
+    (option_csv === undefined || options.some(field =>
+      (option === undefined || field.flag === option) && Boolean(field.csv) === option_csv)) &&
     (option_location === undefined || options.some(field =>
       (option === undefined || field.flag === option) && (field.location ?? "query") === option_location)) &&
     (option_type === undefined || options.some(field =>
@@ -508,7 +511,7 @@ export function commandCatalog({group, search, option, pagination, result_type, 
     schema_version: 1,
     command: "commands",
     ...(details ? {details: true} : {}),
-    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined && result_key === undefined && exclude_option === undefined && option_search === undefined && option_choice === undefined && option_type === undefined && option_location === undefined ? {} : {filters: {
+    ...(group === undefined && search === undefined && option === undefined && pagination === undefined && result_type === undefined && required_option === undefined && result_key === undefined && exclude_option === undefined && option_search === undefined && option_choice === undefined && option_type === undefined && option_location === undefined && option_csv === undefined ? {} : {filters: {
       ...(group === undefined ? {} : {group}),
       ...(search === undefined ? {} : {search}),
       ...(option === undefined ? {} : {option}),
@@ -520,7 +523,8 @@ export function commandCatalog({group, search, option, pagination, result_type, 
       ...(option_search === undefined ? {} : {option_search}),
       ...(option_choice === undefined ? {} : {option_choice}),
       ...(option_type === undefined ? {} : {option_type}),
-      ...(option_location === undefined ? {} : {option_location})
+      ...(option_location === undefined ? {} : {option_location}),
+      ...(option_csv === undefined ? {} : {option_csv})
     }}),
     count: definitions.length,
     commands: details ? definitions.map(describeCommand)
